@@ -45,13 +45,25 @@ class TimetableApp:
         self.root = root
         # Set basic properties first
         self._set_theme()
-        self.root.title("Class Flow")
+        self.root.title("Class Flow v1.3")
         self.root.geometry("1200x700")
         
         # Initialize essential variables
-        self.current_week = datetime.now().isocalendar()[1]
+        now = datetime.now()
+        # Calculate academic week (assuming academic year starts in August)
+        # For August 10, 2025, this should be week 2 of academic year
+        if now.month >= 8:  # August or later in academic year
+            academic_start = datetime(now.year, 8, 1)  # August 1st
+        else:  # January to July, previous academic year
+            academic_start = datetime(now.year - 1, 8, 1)  # Previous August 1st
+        
+        days_since_start = (now - academic_start).days
+        self.current_week = (days_since_start // 7) + 1  # Academic week
+        
         self.selected_week = tk.IntVar(value=self.current_week)
         self.selected_year = tk.IntVar(value=datetime.now().year)
+        self.current_date_str = now.strftime("%B %d, %Y")  # e.g., "August 10, 2025"
+        self.current_time_str = now.strftime("%I:%M %p")    # e.g., "2:30 PM"
         self.impacted_cells = set()
         self.resolved_cells = set()
         self.entries = {}
@@ -173,22 +185,80 @@ class TimetableApp:
             if 'week' not in columns:
                 self.c.execute('ALTER TABLE timetable ADD COLUMN week INTEGER')
         
+        # Create teacher restrictions table for class-section limitations
+        self.c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='teacher_restrictions'")
+        if not self.c.fetchone():
+            self.c.execute('''CREATE TABLE teacher_restrictions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                teacher TEXT,
+                class TEXT,
+                section TEXT,
+                UNIQUE(teacher, class, section)
+            )''')
+        
         self.conn.commit()
+
+    def get_teacher_restrictions(self, teacher):
+        """Get list of (class, section) tuples that a teacher can teach"""
+        self.c.execute("SELECT class, section FROM teacher_restrictions WHERE teacher = ?", (teacher,))
+        return self.c.fetchall()
+    
+    def can_teacher_teach_class_section(self, teacher, class_name, section):
+        """Check if a teacher can teach a specific class-section combination"""
+        self.c.execute(
+            "SELECT COUNT(*) FROM teacher_restrictions WHERE teacher = ? AND class = ? AND section = ?",
+            (teacher, class_name, section)
+        )
+        count = self.c.fetchone()[0]
+        
+        # If no restrictions exist for this teacher, they can teach any class-section
+        self.c.execute("SELECT COUNT(*) FROM teacher_restrictions WHERE teacher = ?", (teacher,))
+        total_restrictions = self.c.fetchone()[0]
+        
+        if total_restrictions == 0:
+            return True  # No restrictions means can teach anywhere
+        
+        return count > 0  # Can teach if specifically allowed
+
+    def filter_teachers_by_restrictions(self, teachers, class_name, section):
+        """Filter teachers based on class-section restrictions"""
+        filtered_teachers = []
+        for teacher in teachers:
+            if self.can_teacher_teach_class_section(teacher, class_name, section):
+                filtered_teachers.append(teacher)
+        return filtered_teachers
 
     def setup_ui(self):
         # Header with app name and beta label, improved alignment and color
         header_frame = tk.Frame(self.root, bg="#2d6cdf")
         header_frame.pack(fill='x', padx=0, pady=(0, 5))
-        header_label = tk.Label(header_frame, text="Class Flow", font=("Segoe UI", 26, "bold"), bg="#2d6cdf", fg="#fff", anchor="center")
+        header_label = tk.Label(header_frame, text="Class Flow v1.3", font=("Segoe UI", 26, "bold"), bg="#2d6cdf", fg="#fff", anchor="center")
         header_label.pack(side='left', expand=True, fill='x', pady=(10, 0), padx=(20, 0))
         
-        # Current week display
-        current_week_label = tk.Label(header_frame, text=f"Current Week: {self.current_week}", 
-                                    font=("Segoe UI", 12, "bold"), bg="#2d6cdf", fg="#ffe082", anchor="w")
-        current_week_label.pack(side='left', pady=(18, 0), padx=(10, 0))
+        # Date and time info frame
+        datetime_frame = tk.Frame(header_frame, bg="#2d6cdf")
+        datetime_frame.pack(side='right', padx=(10, 20), pady=(10, 0))
+        
+        # Current date display
+        date_label = tk.Label(datetime_frame, text=f"{self.current_date_str}", 
+                             font=("Segoe UI", 12, "bold"), bg="#2d6cdf", fg="#ffe082", anchor="e")
+        date_label.pack(anchor='e')
+        
+        # Current time display  
+        self.time_label = tk.Label(datetime_frame, text=f"{self.current_time_str}", 
+                                  font=("Segoe UI", 10), bg="#2d6cdf", fg="#ffffff", anchor="e")
+        self.time_label.pack(anchor='e')
+        
+        # Academic week display
+        week_label = tk.Label(datetime_frame, text=f"Academic Week: {self.current_week}", 
+                             font=("Segoe UI", 10), bg="#2d6cdf", fg="#ffe082", anchor="e")
+        week_label.pack(anchor='e')
         
         beta_label = tk.Label(header_frame, text="beta release", font=("Segoe UI", 12, "italic"), bg="#2d6cdf", fg="#ffe082", anchor="w")
         beta_label.pack(side='left', pady=(18, 0), padx=(10, 20))
+        
+        # Start time update loop
+        self.update_time()
 
         # Top controls
         controls = ttk.Frame(self.root)
@@ -213,6 +283,7 @@ class TimetableApp:
         ttk.Button(actions, text="Auto-Assign", command=self.auto_assign).pack(side='left', padx=5)
         ttk.Button(actions, text="Smart Match", command=self.smart_match, style='Green.TButton').pack(side='left', padx=5)
         ttk.Button(actions, text="Teacher Mapping", command=self.show_teacher_subject_mapping).pack(side='left', padx=5)
+        ttk.Button(actions, text="Teacher Restrictions", command=self.show_teacher_restrictions).pack(side='left', padx=5)
         ttk.Button(actions, text="Teacher Leave", command=self.mark_leave).pack(side='left', padx=5)
         ttk.Button(actions, text="Export Excel", command=self.export_excel).pack(side='left', padx=5)
         ttk.Button(actions, text="Export PDF", command=self.export_pdf).pack(side='left', padx=5)
@@ -248,8 +319,25 @@ class TimetableApp:
         # Add additional scroll event bindings
         self._bind_scroll_events()
         
+        # Add Hypersync footer at the bottom
+        footer_frame = ttk.Frame(self.root)
+        footer_frame.pack(fill='x', pady=(5, 0))
+        
+        footer_label = ttk.Label(footer_frame, text="Hypersync - An AI based education startup", 
+                                font=("Segoe UI", 9), foreground="#666666")
+        footer_label.pack(anchor='center')
+        
         # Initial grid draw
         self.draw_grid()
+
+    def update_time(self):
+        """Update the time display every minute"""
+        now = datetime.now()
+        new_time_str = now.strftime("%I:%M %p")
+        if hasattr(self, 'time_label'):
+            self.time_label.config(text=new_time_str)
+        # Schedule next update in 60 seconds
+        self.root.after(60000, self.update_time)
 
     def _on_frame_configure(self, event):
         """Reset the scroll region to encompass the inner frame"""
@@ -361,6 +449,12 @@ class TimetableApp:
                     c.setFont("Helvetica", 9)
                     y = height - 40
             
+            # Add Hypersync footer at bottom of page
+            c.setFont("Helvetica", 8)
+            footer_text = "Hypersync - An AI based education startup"
+            footer_width = c.stringWidth(footer_text, "Helvetica", 8)
+            c.drawString((width - footer_width) / 2, 30, footer_text)
+            
             c.save()
             messagebox.showinfo("Success", f"PDF exported successfully to:\n{file}")
             
@@ -421,21 +515,73 @@ class TimetableApp:
                         frame.grid(row=row, column=col, sticky='nsew')
                         subj_var = tk.StringVar()
                         teacher_var = tk.StringVar()
-                        subj_cb = ttk.Combobox(frame, textvariable=subj_var, values=self.config['subjects'], width=8, state='readonly')
+                        
+                        # Subject dropdown with blank option
+                        subject_values = [""] + self.config['subjects']  # Add blank option
+                        subj_cb = ttk.Combobox(frame, textvariable=subj_var, values=subject_values, width=8)
                         subj_cb.pack(side='top', fill='x', padx=1, pady=1)
                         
-                        # Make teacher names editable with dropdown
-                        teacher_cb = ttk.Combobox(frame, textvariable=teacher_var, values=self.config['teachers'], width=12)
+                        # Teacher dropdown - initially with all teachers, will be filtered by subject
+                        # Filter initial teacher values by class-section restrictions
+                        allowed_teachers = self.filter_teachers_by_restrictions(self.config['teachers'], class_, section)
+                        teacher_values = [""] + allowed_teachers  # Add blank option
+                        teacher_cb = ttk.Combobox(frame, textvariable=teacher_var, values=teacher_values, width=12)
                         teacher_cb.pack(side='top', fill='x', padx=1, pady=(0,2))
                         
                         self.entries[cell_key] = (subj_var, teacher_var)
                         self.teacher_cbs[cell_key] = teacher_cb
                         self.cell_frames[cell_key] = frame
+                        
+                        def on_subject_change(event=None, key=cell_key, t_cb=teacher_cb, t_var=teacher_var):
+                            """Update teacher dropdown based on selected subject"""
+                            selected_subject = subj_var.get()
+                            current_teacher = t_var.get()
+                            
+                            if selected_subject and selected_subject != "":
+                                # Get teachers who can teach this subject
+                                teacher_subjects = self.config.get('teacher_subjects', {})
+                                if teacher_subjects:
+                                    available_teachers = [teacher for teacher, subjects in teacher_subjects.items() 
+                                                        if selected_subject in subjects]
+                                else:
+                                    # If no mapping exists, show all teachers
+                                    available_teachers = self.config['teachers']
+                                
+                                # Further filter by class-section restrictions
+                                available_teachers = self.filter_teachers_by_restrictions(
+                                    available_teachers, class_, section
+                                )
+                                
+                                # Update teacher dropdown with filtered teachers
+                                filtered_values = [""] + available_teachers
+                                t_cb['values'] = filtered_values
+                                
+                                # Only clear teacher selection if current teacher can't teach this subject
+                                # BUT preserve blank entries and manual entries
+                                if current_teacher and current_teacher != "" and current_teacher not in available_teachers:
+                                    # Check if it's a custom/manual entry not in the original teacher list
+                                    if current_teacher not in self.config['teachers']:
+                                        # Keep custom entries as they might be substitutes or special assignments
+                                        pass
+                                    else:
+                                        # Only clear if it's a standard teacher who can't teach this subject
+                                        t_var.set("")
+                            else:
+                                # If no subject selected, show teachers allowed for this class-section
+                                all_allowed_teachers = self.filter_teachers_by_restrictions(
+                                    self.config['teachers'], class_, section
+                                )
+                                t_cb['values'] = [""] + all_allowed_teachers
+                        
                         def on_teacher_change(event=None, key=cell_key):
                             self.resolved_cells.add(key)
                             self.impacted_cells.discard(key)
                             if key in self.cell_frames:
                                 self.cell_frames[key].configure(style='GreenCell.TFrame')
+                        
+                        # Bind events
+                        subj_cb.bind('<<ComboboxSelected>>', on_subject_change)
+                        subj_cb.bind('<KeyRelease>', on_subject_change)  # For manual typing
                         teacher_cb.bind('<FocusOut>', on_teacher_change)
                         teacher_cb.bind('<Return>', on_teacher_change)
                         teacher_cb.bind('<<ComboboxSelected>>', on_teacher_change)
@@ -519,23 +665,33 @@ class TimetableApp:
                 impact_text.insert(tk.END, "⚠️  Please select both teacher and day to see impact analysis.")
                 impact_text.configure(fg='orange')
                 self.current_impacted_periods = []
+                # Reset substitute dropdown to all teachers
+                substitute_cb['values'] = ['[Leave Blank]'] + self.config['teachers']
                 return
             
             # Find all periods where this teacher is assigned on this day
             impacted_periods = []
+            required_subjects = set()
             for (class_, section, d, period), (subj_var, teacher_var_entry) in self.entries.items():
                 if d == day and teacher_var_entry.get().strip().lower() == teacher.strip().lower():
+                    subject = subj_var.get()
+                    if subject:
+                        required_subjects.add(subject)
                     impacted_periods.append({
                         'class': class_,
                         'section': section,
                         'day': d,
                         'period': period,
                         'period_num': period + 1,
-                        'subject': subj_var.get(),
+                        'subject': subject,
                         'key': (class_, section, d, period)
                     })
             
             self.current_impacted_periods = impacted_periods
+            
+            # Update substitute teacher dropdown - include all teachers for maximum flexibility
+            # Don't filter by subject mapping in leave management to allow for emergency assignments
+            substitute_cb['values'] = ['[Leave Blank]'] + [t for t in self.config['teachers'] if t != teacher]
             
             # Display impact analysis
             impact_text.delete(1.0, tk.END)
@@ -546,8 +702,10 @@ class TimetableApp:
                 impact_text.insert(tk.END, "="*50 + "\n\n")
                 impact_text.insert(tk.END, f"👨‍🏫 Teacher: {teacher}\n")
                 impact_text.insert(tk.END, f"📅 Day: {day}\n")
-                impact_text.insert(tk.END, f"⚠️  Total Periods Affected: {len(impacted_periods)}\n\n")
-                impact_text.insert(tk.END, "📋 AFFECTED PERIODS:\n")
+                impact_text.insert(tk.END, f"⚠️  Total Periods Affected: {len(impacted_periods)}\n")
+                if required_subjects:
+                    impact_text.insert(tk.END, f"📚 Subjects to Cover: {', '.join(sorted(required_subjects))}\n")
+                impact_text.insert(tk.END, "\n📋 AFFECTED PERIODS:\n")
                 impact_text.insert(tk.END, "-" * 40 + "\n")
                 
                 for i, period_info in enumerate(impacted_periods, 1):
@@ -640,6 +798,14 @@ class TimetableApp:
                   style='Accent.TButton').pack(side='left', padx=10)
         ttk.Button(button_frame, text="❌ Cancel", command=dialog.destroy).pack(side='right', padx=5)
         
+        # Add Hypersync footer
+        footer_frame = ttk.Frame(main_frame)
+        footer_frame.pack(fill='x', pady=(10, 0))
+        
+        footer_label = ttk.Label(footer_frame, text="Hypersync - An AI based education startup", 
+                                font=("Segoe UI", 9), foreground="#666666")
+        footer_label.pack(anchor='center')
+        
         # Configure grid weights for responsive design
         selection_frame.columnconfigure(1, weight=1)
         impact_frame.columnconfigure(0, weight=1)
@@ -695,6 +861,17 @@ class TimetableApp:
                 if key in self.entries:
                     self.entries[key][0].set(subject or '')
                     self.entries[key][1].set(teacher or '')
+                    
+                    # Update teacher dropdown based on loaded subject
+                    if key in self.teacher_cbs and subject:
+                        teacher_cb = self.teacher_cbs[key]
+                        teacher_subjects = self.config.get('teacher_subjects', {})
+                        if teacher_subjects:
+                            available_teachers = [t for t, subjs in teacher_subjects.items() if subject in subjs]
+                        else:
+                            available_teachers = self.config['teachers']
+                        teacher_cb['values'] = [""] + available_teachers
+                    
                     rows_loaded += 1
             
             if rows_loaded > 0:
@@ -740,18 +917,45 @@ class TimetableApp:
                             subject = subjects[(period + idx_class + idx_section) % len(subjects)]
                             subj_var.set(subject)
                             
+                            # Update teacher dropdown for this subject
+                            if key in self.teacher_cbs:
+                                teacher_cb = self.teacher_cbs[key]
+                                # Filter teachers based on subject
+                                available_teachers_for_subject = [t for t in all_teachers if subject in teacher_subjects.get(t, [])]
+                                if not available_teachers_for_subject:
+                                    available_teachers_for_subject = all_teachers  # Fallback to all teachers
+                                
+                                # Further filter by class-section restrictions
+                                available_teachers_for_subject = self.filter_teachers_by_restrictions(
+                                    available_teachers_for_subject, class_, section
+                                )
+                                
+                                # Update dropdown values
+                                teacher_cb['values'] = [""] + available_teachers_for_subject
+                            
                             # Find available teacher for this subject not already used in this period
                             available_teachers = [t for t in all_teachers if subject in teacher_subjects.get(t, []) and t not in used_teachers]
                             
+                            # Further filter by class-section restrictions
+                            available_teachers = self.filter_teachers_by_restrictions(
+                                available_teachers, class_, section
+                            )
+                            
                             # If no mapped teacher available, use any available teacher
                             if not available_teachers:
-                                available_teachers = [t for t in all_teachers if t not in used_teachers]
+                                all_available_for_class = self.filter_teachers_by_restrictions(
+                                    [t for t in all_teachers if t not in used_teachers], class_, section
+                                )
+                                available_teachers = all_available_for_class
                             
                             # If still no teacher available, reuse teachers with better distribution
                             if not available_teachers:
-                                # Use teacher in round-robin fashion based on class-section index
-                                teacher_index = class_section_index % len(all_teachers)
-                                assigned_teacher = all_teachers[teacher_index]
+                                # Use teachers allowed for this class-section in round-robin fashion
+                                allowed_teachers = self.filter_teachers_by_restrictions(all_teachers, class_, section)
+                                if not allowed_teachers:
+                                    allowed_teachers = all_teachers  # Ultimate fallback
+                                teacher_index = class_section_index % len(allowed_teachers)
+                                assigned_teacher = allowed_teachers[teacher_index]
                             else:
                                 # Use first available teacher
                                 assigned_teacher = available_teachers[0]
@@ -965,6 +1169,14 @@ class TimetableApp:
         button_frame = ttk.Frame(win)
         button_frame.pack(fill='x', padx=10, pady=(0, 10))
         
+        # Add Hypersync footer
+        footer_frame = ttk.Frame(win)
+        footer_frame.pack(fill='x', padx=10, pady=(5, 0))
+        
+        footer_label = ttk.Label(footer_frame, text="Hypersync - An AI based education startup", 
+                                font=("Segoe UI", 9), foreground="#666666")
+        footer_label.pack(anchor='center')
+        
         def save_and_close():
             # Update mapping from all teacher variables
             for teacher, var in teacher_vars.items():
@@ -988,6 +1200,209 @@ class TimetableApp:
         def _on_mousewheel(event):
             canvas.yview_scroll(int(-1*(event.delta/120)), "units")
         canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        
+        # Focus on window
+        win.focus_set()
+        win.grab_set()  # Make window modal
+
+    def show_teacher_restrictions(self):
+        """Show a dialog to manage teacher class-section restrictions"""
+        win = tk.Toplevel(self.root)
+        win.title("Teacher Class-Section Restrictions")
+        win.geometry("900x700")
+        win.resizable(True, True)
+        
+        # Main frame
+        main_frame = ttk.Frame(win)
+        main_frame.pack(fill='both', expand=True, padx=15, pady=15)
+        
+        # Title header
+        title_label = ttk.Label(main_frame, 
+            text="🎯 Teacher Class-Section Restrictions", 
+            font=("Segoe UI", 16, "bold"),
+            foreground="#2d6cdf")
+        title_label.pack(anchor='w', pady=(0, 10))
+        
+        # Instructions
+        instruction_label = ttk.Label(main_frame, 
+            text="Configure which classes and sections each teacher can teach. Click on teacher tabs below:", 
+            font=("Segoe UI", 11),
+            foreground="#555555")
+        instruction_label.pack(anchor='w', pady=(0, 15))
+        
+        # Create notebook for teachers with better styling
+        style = ttk.Style()
+        style.configure('Teacher.TNotebook.Tab', padding=[20, 8])
+        
+        notebook = ttk.Notebook(main_frame, style='Teacher.TNotebook')
+        notebook.pack(fill='both', expand=True, pady=(0, 15))
+        
+        # Store teacher restriction data
+        teacher_restrictions = {}
+        
+        # Load existing restrictions from database
+        self.c.execute("SELECT teacher, class, section FROM teacher_restrictions")
+        existing_restrictions = {}
+        for teacher, class_name, section in self.c.fetchall():
+            if teacher not in existing_restrictions:
+                existing_restrictions[teacher] = []
+            existing_restrictions[teacher].append((class_name, section))
+        
+        # Create tab for each teacher
+        for teacher in self.config['teachers']:
+            # Check if teacher has existing restrictions
+            has_restrictions = teacher in existing_restrictions and len(existing_restrictions[teacher]) > 0
+            tab_text = f"👨‍🏫 {teacher}" if has_restrictions else f"🆕 {teacher}"
+            
+            # Teacher frame
+            teacher_frame = ttk.Frame(notebook)
+            notebook.add(teacher_frame, text=tab_text)
+            
+            # Create scrollable frame for this teacher
+            canvas = tk.Canvas(teacher_frame, highlightthickness=0)
+            scrollbar = ttk.Scrollbar(teacher_frame, orient="vertical", command=canvas.yview)
+            scrollable_frame = ttk.Frame(canvas)
+            
+            scrollable_frame.bind(
+                "<Configure>",
+                lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+            )
+            
+            canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+            canvas.configure(yscrollcommand=scrollbar.set)
+            
+            # Pack canvas and scrollbar
+            canvas.pack(side="left", fill="both", expand=True)
+            scrollbar.pack(side="right", fill="y")
+            
+            # Teacher name header - make it prominent
+            teacher_header = ttk.Label(scrollable_frame, 
+                text=f"🧑‍🏫 Teacher: {teacher}",
+                font=("Segoe UI", 14, "bold"),
+                foreground="#2d6cdf")
+            teacher_header.pack(anchor='w', pady=(10, 5), padx=10)
+            
+            # Status indicator
+            existing_for_teacher = existing_restrictions.get(teacher, [])
+            if existing_for_teacher:
+                status_text = f"✅ Current Status: {len(existing_for_teacher)} class-section combinations allowed"
+                status_color = "#28a745"
+            else:
+                status_text = "ℹ️ Current Status: No restrictions (can teach any class-section)"
+                status_color = "#6c757d"
+            
+            status_label = ttk.Label(scrollable_frame,
+                text=status_text,
+                font=("Segoe UI", 9),
+                foreground=status_color)
+            status_label.pack(anchor='w', pady=(0, 5), padx=10)
+            
+            # Separator line
+            separator = ttk.Separator(scrollable_frame, orient='horizontal')
+            separator.pack(fill='x', pady=(5, 10), padx=10)
+            
+            # Instructions for this teacher
+            teacher_instruction = ttk.Label(scrollable_frame, 
+                text=f"Select the classes and sections that {teacher} is allowed to teach:",
+                font=("Segoe UI", 10),
+                foreground="#333333")
+            teacher_instruction.pack(anchor='w', pady=(0, 15), padx=10)
+            
+            # Create checkboxes for each class-section combination
+            teacher_restrictions[teacher] = {}
+            existing_for_teacher = existing_restrictions.get(teacher, [])
+            
+            for class_name in self.config['classes']:
+                # Class frame with better styling
+                class_frame = ttk.LabelFrame(scrollable_frame, 
+                    text=f"📚 {class_name}", 
+                    padding=10)
+                class_frame.pack(fill='x', pady=8, padx=15)
+                
+                # Section checkboxes with better layout
+                section_frame = ttk.Frame(class_frame)
+                section_frame.pack(fill='x')
+                
+                # Add a label for sections
+                section_label = ttk.Label(section_frame, 
+                    text="Allowed Sections:", 
+                    font=("Segoe UI", 9, "bold"))
+                section_label.pack(anchor='w', pady=(0, 5))
+                
+                # Create a grid layout for sections
+                checkbox_frame = ttk.Frame(section_frame)
+                checkbox_frame.pack(fill='x')
+                
+                col = 0
+                for section in self.config['sections']:
+                    var = tk.BooleanVar()
+                    # Check if this combination exists in restrictions
+                    if (class_name, section) in existing_for_teacher:
+                        var.set(True)
+                    
+                    cb = ttk.Checkbutton(checkbox_frame, 
+                        text=f"Section {section}", 
+                        variable=var,
+                        style='TCheckbutton')
+                    cb.grid(row=0, column=col, sticky='w', padx=15, pady=2)
+                    col += 1
+                    
+                    # Store the variable
+                    if class_name not in teacher_restrictions[teacher]:
+                        teacher_restrictions[teacher][class_name] = {}
+                    teacher_restrictions[teacher][class_name][section] = var
+            
+            # Enable mouse wheel scrolling for this canvas
+            def make_scroll_handler(canvas):
+                def _on_mousewheel(event):
+                    canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+                return _on_mousewheel
+            
+            scroll_handler = make_scroll_handler(canvas)
+            canvas.bind_all("<MouseWheel>", scroll_handler)
+        
+        # Button frame at bottom
+        button_frame = ttk.Frame(win)
+        button_frame.pack(fill='x', padx=10, pady=(0, 10))
+        
+        # Add Hypersync footer
+        footer_frame = ttk.Frame(win)
+        footer_frame.pack(fill='x', padx=10, pady=(5, 0))
+        
+        footer_label = ttk.Label(footer_frame, text="Hypersync - An AI based education startup", 
+                                font=("Segoe UI", 9), foreground="#666666")
+        footer_label.pack(anchor='center')
+        
+        def save_restrictions():
+            """Save teacher restrictions to database"""
+            try:
+                # Clear existing restrictions
+                self.c.execute("DELETE FROM teacher_restrictions")
+                
+                # Insert new restrictions
+                for teacher in teacher_restrictions:
+                    for class_name in teacher_restrictions[teacher]:
+                        for section in teacher_restrictions[teacher][class_name]:
+                            if teacher_restrictions[teacher][class_name][section].get():
+                                self.c.execute(
+                                    "INSERT INTO teacher_restrictions (teacher, class, section) VALUES (?, ?, ?)",
+                                    (teacher, class_name, section)
+                                )
+                
+                self.conn.commit()
+                win.destroy()
+                messagebox.showinfo("Success", "Teacher restrictions saved successfully!")
+                
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to save restrictions: {str(e)}")
+        
+        def cancel():
+            win.destroy()
+        
+        # Buttons
+        ttk.Button(button_frame, text="Save & Close", command=save_restrictions, 
+                  style='Green.TButton').pack(side='right', padx=5)
+        ttk.Button(button_frame, text="Cancel", command=cancel).pack(side='right', padx=5)
         
         # Focus on window
         win.focus_set()

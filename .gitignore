@@ -28,7 +28,14 @@ MANIFEST
 build/
 dist/
 
-# Database
+# Executables
+*.exe
+*.app
+*.dmg
+*.pkg
+
+# Database files
+*.db
 *.db-journal
 *.db-shm
 *.db-wal
@@ -54,3 +61,35 @@ clients/*/
 # Temporary files
 temp/
 tmp/
+
+# Documents and irrelevant files
+Documents/
+*.docx
+*.xlsx
+*.pptx
+*.pdf
+*.jpg
+*.png
+*.lnk
+*.html
+*.css
+*.js
+history/
+playwright-project/
+TimetablePlannerApp/
+withkids.jpg
+Prashant.jpg
+prashant*
+*.bak
+
+# Build and test files
+test_*.py
+build_*.py
+create_*.py
+generate_*.py
+version.py
+setup_git.*
+
+# Config that should not be shared
+timetable.db
+config.json
