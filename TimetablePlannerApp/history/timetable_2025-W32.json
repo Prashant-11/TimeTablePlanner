@@ -1,0 +1,1482 @@
+[
+  {
+    "class": "Class 1",
+    "section": "A",
+    "day": "Monday",
+    "period": 0,
+    "subject": "Math",
+    "teacher": "Anil"
+  },
+  {
+    "class": "Class 1",
+    "section": "A",
+    "day": "Monday",
+    "period": 1,
+    "subject": "Science",
+    "teacher": "Anil"
+  },
+  {
+    "class": "Class 1",
+    "section": "A",
+    "day": "Monday",
+    "period": 2,
+    "subject": "English",
+    "teacher": "Pappi"
+  },
+  {
+    "class": "Class 1",
+    "section": "A",
+    "day": "Monday",
+    "period": 3,
+    "subject": "History",
+    "teacher": "Baby"
+  },
+  {
+    "class": "Class 1",
+    "section": "A",
+    "day": "Monday",
+    "period": 4,
+    "subject": "Geography",
+    "teacher": "Baby"
+  },
+  {
+    "class": "Class 1",
+    "section": "A",
+    "day": "Monday",
+    "period": 5,
+    "subject": "Math",
+    "teacher": "Anil"
+  },
+  {
+    "class": "Class 1",
+    "section": "A",
+    "day": "Monday",
+    "period": 6,
+    "subject": "Science",
+    "teacher": "Anil"
+  },
+  {
+    "class": "Class 1",
+    "section": "A",
+    "day": "Tuesday",
+    "period": 0,
+    "subject": "Math",
+    "teacher": "Anil"
+  },
+  {
+    "class": "Class 1",
+    "section": "A",
+    "day": "Tuesday",
+    "period": 1,
+    "subject": "Science",
+    "teacher": "Anil"
+  },
+  {
+    "class": "Class 1",
+    "section": "A",
+    "day": "Tuesday",
+    "period": 2,
+    "subject": "English",
+    "teacher": "Pappi"
+  },
+  {
+    "class": "Class 1",
+    "section": "A",
+    "day": "Tuesday",
+    "period": 3,
+    "subject": "History",
+    "teacher": "Baby"
+  },
+  {
+    "class": "Class 1",
+    "section": "A",
+    "day": "Tuesday",
+    "period": 4,
+    "subject": "Geography",
+    "teacher": "Baby"
+  },
+  {
+    "class": "Class 1",
+    "section": "A",
+    "day": "Tuesday",
+    "period": 5,
+    "subject": "Math",
+    "teacher": "Anil"
+  },
+  {
+    "class": "Class 1",
+    "section": "A",
+    "day": "Tuesday",
+    "period": 6,
+    "subject": "Science",
+    "teacher": "Anil"
+  },
+  {
+    "class": "Class 1",
+    "section": "A",
+    "day": "Wednesday",
+    "period": 0,
+    "subject": "Math",
+    "teacher": "Anil"
+  },
+  {
+    "class": "Class 1",
+    "section": "A",
+    "day": "Wednesday",
+    "period": 1,
+    "subject": "Science",
+    "teacher": "Anil"
+  },
+  {
+    "class": "Class 1",
+    "section": "A",
+    "day": "Wednesday",
+    "period": 2,
+    "subject": "English",
+    "teacher": "Pappi"
+  },
+  {
+    "class": "Class 1",
+    "section": "A",
+    "day": "Wednesday",
+    "period": 3,
+    "subject": "History",
+    "teacher": "Baby"
+  },
+  {
+    "class": "Class 1",
+    "section": "A",
+    "day": "Wednesday",
+    "period": 4,
+    "subject": "Geography",
+    "teacher": "Baby"
+  },
+  {
+    "class": "Class 1",
+    "section": "A",
+    "day": "Wednesday",
+    "period": 5,
+    "subject": "Math",
+    "teacher": "Anil"
+  },
+  {
+    "class": "Class 1",
+    "section": "A",
+    "day": "Wednesday",
+    "period": 6,
+    "subject": "Science",
+    "teacher": "Anil"
+  },
+  {
+    "class": "Class 1",
+    "section": "A",
+    "day": "Thursday",
+    "period": 0,
+    "subject": "Math",
+    "teacher": "Anil"
+  },
+  {
+    "class": "Class 1",
+    "section": "A",
+    "day": "Thursday",
+    "period": 1,
+    "subject": "Science",
+    "teacher": "Anil"
+  },
+  {
+    "class": "Class 1",
+    "section": "A",
+    "day": "Thursday",
+    "period": 2,
+    "subject": "English",
+    "teacher": "Pappi"
+  },
+  {
+    "class": "Class 1",
+    "section": "A",
+    "day": "Thursday",
+    "period": 3,
+    "subject": "History",
+    "teacher": "Baby"
+  },
+  {
+    "class": "Class 1",
+    "section": "A",
+    "day": "Thursday",
+    "period": 4,
+    "subject": "Geography",
+    "teacher": "Baby"
+  },
+  {
+    "class": "Class 1",
+    "section": "A",
+    "day": "Thursday",
+    "period": 5,
+    "subject": "Math",
+    "teacher": "Anil"
+  },
+  {
+    "class": "Class 1",
+    "section": "A",
+    "day": "Thursday",
+    "period": 6,
+    "subject": "Science",
+    "teacher": "Anil"
+  },
+  {
+    "class": "Class 1",
+    "section": "A",
+    "day": "Friday",
+    "period": 0,
+    "subject": "Math",
+    "teacher": "Anil"
+  },
+  {
+    "class": "Class 1",
+    "section": "A",
+    "day": "Friday",
+    "period": 1,
+    "subject": "Science",
+    "teacher": "Anil"
+  },
+  {
+    "class": "Class 1",
+    "section": "A",
+    "day": "Friday",
+    "period": 2,
+    "subject": "English",
+    "teacher": "Pappi"
+  },
+  {
+    "class": "Class 1",
+    "section": "A",
+    "day": "Friday",
+    "period": 3,
+    "subject": "History",
+    "teacher": "Baby"
+  },
+  {
+    "class": "Class 1",
+    "section": "A",
+    "day": "Friday",
+    "period": 4,
+    "subject": "Geography",
+    "teacher": "Baby"
+  },
+  {
+    "class": "Class 1",
+    "section": "A",
+    "day": "Friday",
+    "period": 5,
+    "subject": "Math",
+    "teacher": "Anil"
+  },
+  {
+    "class": "Class 1",
+    "section": "A",
+    "day": "Friday",
+    "period": 6,
+    "subject": "Science",
+    "teacher": "Anil"
+  },
+  {
+    "class": "Class 1",
+    "section": "B",
+    "day": "Monday",
+    "period": 0,
+    "subject": "Math",
+    "teacher": "Piddi"
+  },
+  {
+    "class": "Class 1",
+    "section": "B",
+    "day": "Monday",
+    "period": 1,
+    "subject": "Science",
+    "teacher": "Babu"
+  },
+  {
+    "class": "Class 1",
+    "section": "B",
+    "day": "Monday",
+    "period": 2,
+    "subject": "English",
+    "teacher": "Dada"
+  },
+  {
+    "class": "Class 1",
+    "section": "B",
+    "day": "Monday",
+    "period": 3,
+    "subject": "History",
+    "teacher": "Dada"
+  },
+  {
+    "class": "Class 1",
+    "section": "B",
+    "day": "Monday",
+    "period": 4,
+    "subject": "Geography",
+    "teacher": "Mammu"
+  },
+  {
+    "class": "Class 1",
+    "section": "B",
+    "day": "Monday",
+    "period": 5,
+    "subject": "Math",
+    "teacher": "Piddi"
+  },
+  {
+    "class": "Class 1",
+    "section": "B",
+    "day": "Monday",
+    "period": 6,
+    "subject": "Science",
+    "teacher": "Babu"
+  },
+  {
+    "class": "Class 1",
+    "section": "B",
+    "day": "Tuesday",
+    "period": 0,
+    "subject": "Math",
+    "teacher": "Piddi"
+  },
+  {
+    "class": "Class 1",
+    "section": "B",
+    "day": "Tuesday",
+    "period": 1,
+    "subject": "Science",
+    "teacher": "Babu"
+  },
+  {
+    "class": "Class 1",
+    "section": "B",
+    "day": "Tuesday",
+    "period": 2,
+    "subject": "English",
+    "teacher": "Dada"
+  },
+  {
+    "class": "Class 1",
+    "section": "B",
+    "day": "Tuesday",
+    "period": 3,
+    "subject": "History",
+    "teacher": "Dada"
+  },
+  {
+    "class": "Class 1",
+    "section": "B",
+    "day": "Tuesday",
+    "period": 4,
+    "subject": "Geography",
+    "teacher": "Mammu"
+  },
+  {
+    "class": "Class 1",
+    "section": "B",
+    "day": "Tuesday",
+    "period": 5,
+    "subject": "Math",
+    "teacher": "Piddi"
+  },
+  {
+    "class": "Class 1",
+    "section": "B",
+    "day": "Tuesday",
+    "period": 6,
+    "subject": "Science",
+    "teacher": "Babu"
+  },
+  {
+    "class": "Class 1",
+    "section": "B",
+    "day": "Wednesday",
+    "period": 0,
+    "subject": "Math",
+    "teacher": "Piddi"
+  },
+  {
+    "class": "Class 1",
+    "section": "B",
+    "day": "Wednesday",
+    "period": 1,
+    "subject": "Science",
+    "teacher": "Babu"
+  },
+  {
+    "class": "Class 1",
+    "section": "B",
+    "day": "Wednesday",
+    "period": 2,
+    "subject": "English",
+    "teacher": "Dada"
+  },
+  {
+    "class": "Class 1",
+    "section": "B",
+    "day": "Wednesday",
+    "period": 3,
+    "subject": "History",
+    "teacher": "Dada"
+  },
+  {
+    "class": "Class 1",
+    "section": "B",
+    "day": "Wednesday",
+    "period": 4,
+    "subject": "Geography",
+    "teacher": "Mammu"
+  },
+  {
+    "class": "Class 1",
+    "section": "B",
+    "day": "Wednesday",
+    "period": 5,
+    "subject": "Math",
+    "teacher": "Piddi"
+  },
+  {
+    "class": "Class 1",
+    "section": "B",
+    "day": "Wednesday",
+    "period": 6,
+    "subject": "Science",
+    "teacher": "Babu"
+  },
+  {
+    "class": "Class 1",
+    "section": "B",
+    "day": "Thursday",
+    "period": 0,
+    "subject": "Math",
+    "teacher": "Piddi"
+  },
+  {
+    "class": "Class 1",
+    "section": "B",
+    "day": "Thursday",
+    "period": 1,
+    "subject": "Science",
+    "teacher": "Babu"
+  },
+  {
+    "class": "Class 1",
+    "section": "B",
+    "day": "Thursday",
+    "period": 2,
+    "subject": "English",
+    "teacher": "Dada"
+  },
+  {
+    "class": "Class 1",
+    "section": "B",
+    "day": "Thursday",
+    "period": 3,
+    "subject": "History",
+    "teacher": "Dada"
+  },
+  {
+    "class": "Class 1",
+    "section": "B",
+    "day": "Thursday",
+    "period": 4,
+    "subject": "Geography",
+    "teacher": "Mammu"
+  },
+  {
+    "class": "Class 1",
+    "section": "B",
+    "day": "Thursday",
+    "period": 5,
+    "subject": "Math",
+    "teacher": "Piddi"
+  },
+  {
+    "class": "Class 1",
+    "section": "B",
+    "day": "Thursday",
+    "period": 6,
+    "subject": "Science",
+    "teacher": "Babu"
+  },
+  {
+    "class": "Class 1",
+    "section": "B",
+    "day": "Friday",
+    "period": 0,
+    "subject": "Math",
+    "teacher": "Piddi"
+  },
+  {
+    "class": "Class 1",
+    "section": "B",
+    "day": "Friday",
+    "period": 1,
+    "subject": "Science",
+    "teacher": "Babu"
+  },
+  {
+    "class": "Class 1",
+    "section": "B",
+    "day": "Friday",
+    "period": 2,
+    "subject": "English",
+    "teacher": "Dada"
+  },
+  {
+    "class": "Class 1",
+    "section": "B",
+    "day": "Friday",
+    "period": 3,
+    "subject": "History",
+    "teacher": "Dada"
+  },
+  {
+    "class": "Class 1",
+    "section": "B",
+    "day": "Friday",
+    "period": 4,
+    "subject": "Geography",
+    "teacher": "Mammu"
+  },
+  {
+    "class": "Class 1",
+    "section": "B",
+    "day": "Friday",
+    "period": 5,
+    "subject": "Math",
+    "teacher": "Piddi"
+  },
+  {
+    "class": "Class 1",
+    "section": "B",
+    "day": "Friday",
+    "period": 6,
+    "subject": "Science",
+    "teacher": "Babu"
+  },
+  {
+    "class": "Class 2",
+    "section": "A",
+    "day": "Monday",
+    "period": 0,
+    "subject": "Math",
+    "teacher": "Neeraj"
+  },
+  {
+    "class": "Class 2",
+    "section": "A",
+    "day": "Monday",
+    "period": 1,
+    "subject": "Science",
+    "teacher": "Neeraj"
+  },
+  {
+    "class": "Class 2",
+    "section": "A",
+    "day": "Monday",
+    "period": 2,
+    "subject": "English",
+    "teacher": "Sushil"
+  },
+  {
+    "class": "Class 2",
+    "section": "A",
+    "day": "Monday",
+    "period": 3,
+    "subject": "History",
+    "teacher": "Paresh"
+  },
+  {
+    "class": "Class 2",
+    "section": "A",
+    "day": "Monday",
+    "period": 4,
+    "subject": "Geography",
+    "teacher": "Amit"
+  },
+  {
+    "class": "Class 2",
+    "section": "A",
+    "day": "Monday",
+    "period": 5,
+    "subject": "Math",
+    "teacher": "Neeraj"
+  },
+  {
+    "class": "Class 2",
+    "section": "A",
+    "day": "Monday",
+    "period": 6,
+    "subject": "Science",
+    "teacher": "Neeraj"
+  },
+  {
+    "class": "Class 2",
+    "section": "A",
+    "day": "Tuesday",
+    "period": 0,
+    "subject": "Math",
+    "teacher": "Neeraj"
+  },
+  {
+    "class": "Class 2",
+    "section": "A",
+    "day": "Tuesday",
+    "period": 1,
+    "subject": "Science",
+    "teacher": "Neeraj"
+  },
+  {
+    "class": "Class 2",
+    "section": "A",
+    "day": "Tuesday",
+    "period": 2,
+    "subject": "English",
+    "teacher": "Sushil"
+  },
+  {
+    "class": "Class 2",
+    "section": "A",
+    "day": "Tuesday",
+    "period": 3,
+    "subject": "History",
+    "teacher": "Paresh"
+  },
+  {
+    "class": "Class 2",
+    "section": "A",
+    "day": "Tuesday",
+    "period": 4,
+    "subject": "Geography",
+    "teacher": "Amit"
+  },
+  {
+    "class": "Class 2",
+    "section": "A",
+    "day": "Tuesday",
+    "period": 5,
+    "subject": "Math",
+    "teacher": "Neeraj"
+  },
+  {
+    "class": "Class 2",
+    "section": "A",
+    "day": "Tuesday",
+    "period": 6,
+    "subject": "Science",
+    "teacher": "Neeraj"
+  },
+  {
+    "class": "Class 2",
+    "section": "A",
+    "day": "Wednesday",
+    "period": 0,
+    "subject": "Math",
+    "teacher": "Neeraj"
+  },
+  {
+    "class": "Class 2",
+    "section": "A",
+    "day": "Wednesday",
+    "period": 1,
+    "subject": "Science",
+    "teacher": "Neeraj"
+  },
+  {
+    "class": "Class 2",
+    "section": "A",
+    "day": "Wednesday",
+    "period": 2,
+    "subject": "English",
+    "teacher": "Sushil"
+  },
+  {
+    "class": "Class 2",
+    "section": "A",
+    "day": "Wednesday",
+    "period": 3,
+    "subject": "History",
+    "teacher": "Paresh"
+  },
+  {
+    "class": "Class 2",
+    "section": "A",
+    "day": "Wednesday",
+    "period": 4,
+    "subject": "Geography",
+    "teacher": "Amit"
+  },
+  {
+    "class": "Class 2",
+    "section": "A",
+    "day": "Wednesday",
+    "period": 5,
+    "subject": "Math",
+    "teacher": "Neeraj"
+  },
+  {
+    "class": "Class 2",
+    "section": "A",
+    "day": "Wednesday",
+    "period": 6,
+    "subject": "Science",
+    "teacher": "Neeraj"
+  },
+  {
+    "class": "Class 2",
+    "section": "A",
+    "day": "Thursday",
+    "period": 0,
+    "subject": "Math",
+    "teacher": "Neeraj"
+  },
+  {
+    "class": "Class 2",
+    "section": "A",
+    "day": "Thursday",
+    "period": 1,
+    "subject": "Science",
+    "teacher": "Neeraj"
+  },
+  {
+    "class": "Class 2",
+    "section": "A",
+    "day": "Thursday",
+    "period": 2,
+    "subject": "English",
+    "teacher": "Sushil"
+  },
+  {
+    "class": "Class 2",
+    "section": "A",
+    "day": "Thursday",
+    "period": 3,
+    "subject": "History",
+    "teacher": "Paresh"
+  },
+  {
+    "class": "Class 2",
+    "section": "A",
+    "day": "Thursday",
+    "period": 4,
+    "subject": "Geography",
+    "teacher": "Amit"
+  },
+  {
+    "class": "Class 2",
+    "section": "A",
+    "day": "Thursday",
+    "period": 5,
+    "subject": "Math",
+    "teacher": "Neeraj"
+  },
+  {
+    "class": "Class 2",
+    "section": "A",
+    "day": "Thursday",
+    "period": 6,
+    "subject": "Science",
+    "teacher": "Neeraj"
+  },
+  {
+    "class": "Class 2",
+    "section": "A",
+    "day": "Friday",
+    "period": 0,
+    "subject": "Math",
+    "teacher": "Neeraj"
+  },
+  {
+    "class": "Class 2",
+    "section": "A",
+    "day": "Friday",
+    "period": 1,
+    "subject": "Science",
+    "teacher": "Neeraj"
+  },
+  {
+    "class": "Class 2",
+    "section": "A",
+    "day": "Friday",
+    "period": 2,
+    "subject": "English",
+    "teacher": "Sushil"
+  },
+  {
+    "class": "Class 2",
+    "section": "A",
+    "day": "Friday",
+    "period": 3,
+    "subject": "History",
+    "teacher": "Paresh"
+  },
+  {
+    "class": "Class 2",
+    "section": "A",
+    "day": "Friday",
+    "period": 4,
+    "subject": "Geography",
+    "teacher": "Amit"
+  },
+  {
+    "class": "Class 2",
+    "section": "A",
+    "day": "Friday",
+    "period": 5,
+    "subject": "Math",
+    "teacher": "Neeraj"
+  },
+  {
+    "class": "Class 2",
+    "section": "A",
+    "day": "Friday",
+    "period": 6,
+    "subject": "Science",
+    "teacher": "Neeraj"
+  },
+  {
+    "class": "Class 2",
+    "section": "B",
+    "day": "Monday",
+    "period": 0,
+    "subject": "Math",
+    "teacher": "Base Raju"
+  },
+  {
+    "class": "Class 2",
+    "section": "B",
+    "day": "Monday",
+    "period": 1,
+    "subject": "Science",
+    "teacher": "Chote Raju"
+  },
+  {
+    "class": "Class 2",
+    "section": "B",
+    "day": "Monday",
+    "period": 2,
+    "subject": "English",
+    "teacher": "Rohit"
+  },
+  {
+    "class": "Class 2",
+    "section": "B",
+    "day": "Monday",
+    "period": 3,
+    "subject": "History",
+    "teacher": "Ramesh"
+  },
+  {
+    "class": "Class 2",
+    "section": "B",
+    "day": "Monday",
+    "period": 5,
+    "subject": "Math",
+    "teacher": "Base Raju"
+  },
+  {
+    "class": "Class 2",
+    "section": "B",
+    "day": "Monday",
+    "period": 6,
+    "subject": "Science",
+    "teacher": "Chote Raju"
+  },
+  {
+    "class": "Class 2",
+    "section": "B",
+    "day": "Tuesday",
+    "period": 0,
+    "subject": "Math",
+    "teacher": "Base Raju"
+  },
+  {
+    "class": "Class 2",
+    "section": "B",
+    "day": "Tuesday",
+    "period": 1,
+    "subject": "Science",
+    "teacher": "Chote Raju"
+  },
+  {
+    "class": "Class 2",
+    "section": "B",
+    "day": "Tuesday",
+    "period": 2,
+    "subject": "English",
+    "teacher": "Rohit"
+  },
+  {
+    "class": "Class 2",
+    "section": "B",
+    "day": "Tuesday",
+    "period": 3,
+    "subject": "History",
+    "teacher": "Ramesh"
+  },
+  {
+    "class": "Class 2",
+    "section": "B",
+    "day": "Tuesday",
+    "period": 5,
+    "subject": "Math",
+    "teacher": "Base Raju"
+  },
+  {
+    "class": "Class 2",
+    "section": "B",
+    "day": "Tuesday",
+    "period": 6,
+    "subject": "Science",
+    "teacher": "Chote Raju"
+  },
+  {
+    "class": "Class 2",
+    "section": "B",
+    "day": "Wednesday",
+    "period": 0,
+    "subject": "Math",
+    "teacher": "Base Raju"
+  },
+  {
+    "class": "Class 2",
+    "section": "B",
+    "day": "Wednesday",
+    "period": 1,
+    "subject": "Science",
+    "teacher": "Chote Raju"
+  },
+  {
+    "class": "Class 2",
+    "section": "B",
+    "day": "Wednesday",
+    "period": 2,
+    "subject": "English",
+    "teacher": "Rohit"
+  },
+  {
+    "class": "Class 2",
+    "section": "B",
+    "day": "Wednesday",
+    "period": 3,
+    "subject": "History",
+    "teacher": "Ramesh"
+  },
+  {
+    "class": "Class 2",
+    "section": "B",
+    "day": "Wednesday",
+    "period": 5,
+    "subject": "Math",
+    "teacher": "Base Raju"
+  },
+  {
+    "class": "Class 2",
+    "section": "B",
+    "day": "Wednesday",
+    "period": 6,
+    "subject": "Science",
+    "teacher": "Chote Raju"
+  },
+  {
+    "class": "Class 2",
+    "section": "B",
+    "day": "Thursday",
+    "period": 0,
+    "subject": "Math",
+    "teacher": "Base Raju"
+  },
+  {
+    "class": "Class 2",
+    "section": "B",
+    "day": "Thursday",
+    "period": 1,
+    "subject": "Science",
+    "teacher": "Chote Raju"
+  },
+  {
+    "class": "Class 2",
+    "section": "B",
+    "day": "Thursday",
+    "period": 2,
+    "subject": "English",
+    "teacher": "Rohit"
+  },
+  {
+    "class": "Class 2",
+    "section": "B",
+    "day": "Thursday",
+    "period": 3,
+    "subject": "History",
+    "teacher": "Ramesh"
+  },
+  {
+    "class": "Class 2",
+    "section": "B",
+    "day": "Thursday",
+    "period": 5,
+    "subject": "Math",
+    "teacher": "Base Raju"
+  },
+  {
+    "class": "Class 2",
+    "section": "B",
+    "day": "Thursday",
+    "period": 6,
+    "subject": "Science",
+    "teacher": "Chote Raju"
+  },
+  {
+    "class": "Class 2",
+    "section": "B",
+    "day": "Friday",
+    "period": 0,
+    "subject": "Math",
+    "teacher": "Base Raju"
+  },
+  {
+    "class": "Class 2",
+    "section": "B",
+    "day": "Friday",
+    "period": 1,
+    "subject": "Science",
+    "teacher": "Chote Raju"
+  },
+  {
+    "class": "Class 2",
+    "section": "B",
+    "day": "Friday",
+    "period": 2,
+    "subject": "English",
+    "teacher": "Rohit"
+  },
+  {
+    "class": "Class 2",
+    "section": "B",
+    "day": "Friday",
+    "period": 3,
+    "subject": "History",
+    "teacher": "Ramesh"
+  },
+  {
+    "class": "Class 2",
+    "section": "B",
+    "day": "Friday",
+    "period": 5,
+    "subject": "Math",
+    "teacher": "Base Raju"
+  },
+  {
+    "class": "Class 2",
+    "section": "B",
+    "day": "Friday",
+    "period": 6,
+    "subject": "Science",
+    "teacher": "Chote Raju"
+  },
+  {
+    "class": "Class 3",
+    "section": "A",
+    "day": "Monday",
+    "period": 0,
+    "subject": "Math",
+    "teacher": "Rohit"
+  },
+  {
+    "class": "Class 3",
+    "section": "A",
+    "day": "Monday",
+    "period": 1,
+    "subject": "Science",
+    "teacher": "Vikas"
+  },
+  {
+    "class": "Class 3",
+    "section": "A",
+    "day": "Monday",
+    "period": 2,
+    "subject": "English",
+    "teacher": "Amit"
+  },
+  {
+    "class": "Class 3",
+    "section": "A",
+    "day": "Monday",
+    "period": 5,
+    "subject": "Math",
+    "teacher": "Rohit"
+  },
+  {
+    "class": "Class 3",
+    "section": "A",
+    "day": "Monday",
+    "period": 6,
+    "subject": "Science",
+    "teacher": "Vikas"
+  },
+  {
+    "class": "Class 3",
+    "section": "A",
+    "day": "Tuesday",
+    "period": 0,
+    "subject": "Math",
+    "teacher": "Rohit"
+  },
+  {
+    "class": "Class 3",
+    "section": "A",
+    "day": "Tuesday",
+    "period": 1,
+    "subject": "Science",
+    "teacher": "Vikas"
+  },
+  {
+    "class": "Class 3",
+    "section": "A",
+    "day": "Tuesday",
+    "period": 2,
+    "subject": "English",
+    "teacher": "Amit"
+  },
+  {
+    "class": "Class 3",
+    "section": "A",
+    "day": "Tuesday",
+    "period": 5,
+    "subject": "Math",
+    "teacher": "Rohit"
+  },
+  {
+    "class": "Class 3",
+    "section": "A",
+    "day": "Tuesday",
+    "period": 6,
+    "subject": "Science",
+    "teacher": "Vikas"
+  },
+  {
+    "class": "Class 3",
+    "section": "A",
+    "day": "Wednesday",
+    "period": 0,
+    "subject": "Math",
+    "teacher": "Rohit"
+  },
+  {
+    "class": "Class 3",
+    "section": "A",
+    "day": "Wednesday",
+    "period": 1,
+    "subject": "Science",
+    "teacher": "Vikas"
+  },
+  {
+    "class": "Class 3",
+    "section": "A",
+    "day": "Wednesday",
+    "period": 2,
+    "subject": "English",
+    "teacher": "Amit"
+  },
+  {
+    "class": "Class 3",
+    "section": "A",
+    "day": "Wednesday",
+    "period": 5,
+    "subject": "Math",
+    "teacher": "Rohit"
+  },
+  {
+    "class": "Class 3",
+    "section": "A",
+    "day": "Wednesday",
+    "period": 6,
+    "subject": "Science",
+    "teacher": "Vikas"
+  },
+  {
+    "class": "Class 3",
+    "section": "A",
+    "day": "Thursday",
+    "period": 0,
+    "subject": "Math",
+    "teacher": "Rohit"
+  },
+  {
+    "class": "Class 3",
+    "section": "A",
+    "day": "Thursday",
+    "period": 1,
+    "subject": "Science",
+    "teacher": "Vikas"
+  },
+  {
+    "class": "Class 3",
+    "section": "A",
+    "day": "Thursday",
+    "period": 2,
+    "subject": "English",
+    "teacher": "Amit"
+  },
+  {
+    "class": "Class 3",
+    "section": "A",
+    "day": "Thursday",
+    "period": 5,
+    "subject": "Math",
+    "teacher": "Rohit"
+  },
+  {
+    "class": "Class 3",
+    "section": "A",
+    "day": "Thursday",
+    "period": 6,
+    "subject": "Science",
+    "teacher": "Vikas"
+  },
+  {
+    "class": "Class 3",
+    "section": "A",
+    "day": "Friday",
+    "period": 0,
+    "subject": "Math",
+    "teacher": "Rohit"
+  },
+  {
+    "class": "Class 3",
+    "section": "A",
+    "day": "Friday",
+    "period": 1,
+    "subject": "Science",
+    "teacher": "Vikas"
+  },
+  {
+    "class": "Class 3",
+    "section": "A",
+    "day": "Friday",
+    "period": 2,
+    "subject": "English",
+    "teacher": "Amit"
+  },
+  {
+    "class": "Class 3",
+    "section": "A",
+    "day": "Friday",
+    "period": 5,
+    "subject": "Math",
+    "teacher": "Rohit"
+  },
+  {
+    "class": "Class 3",
+    "section": "A",
+    "day": "Friday",
+    "period": 6,
+    "subject": "Science",
+    "teacher": "Vikas"
+  },
+  {
+    "class": "Class 3",
+    "section": "B",
+    "day": "Monday",
+    "period": 0,
+    "subject": "Math",
+    "teacher": "Sunil"
+  },
+  {
+    "class": "Class 3",
+    "section": "B",
+    "day": "Monday",
+    "period": 1,
+    "subject": "Science",
+    "teacher": "Ramesh"
+  },
+  {
+    "class": "Class 3",
+    "section": "B",
+    "day": "Monday",
+    "period": 2,
+    "subject": "English",
+    "teacher": "Suresh"
+  },
+  {
+    "class": "Class 3",
+    "section": "B",
+    "day": "Monday",
+    "period": 5,
+    "subject": "Math",
+    "teacher": "Sunil"
+  },
+  {
+    "class": "Class 3",
+    "section": "B",
+    "day": "Monday",
+    "period": 6,
+    "subject": "Science",
+    "teacher": "Ramesh"
+  },
+  {
+    "class": "Class 3",
+    "section": "B",
+    "day": "Tuesday",
+    "period": 0,
+    "subject": "Math",
+    "teacher": "Sunil"
+  },
+  {
+    "class": "Class 3",
+    "section": "B",
+    "day": "Tuesday",
+    "period": 1,
+    "subject": "Science",
+    "teacher": "Ramesh"
+  },
+  {
+    "class": "Class 3",
+    "section": "B",
+    "day": "Tuesday",
+    "period": 2,
+    "subject": "English",
+    "teacher": "Suresh"
+  },
+  {
+    "class": "Class 3",
+    "section": "B",
+    "day": "Tuesday",
+    "period": 5,
+    "subject": "Math",
+    "teacher": "Sunil"
+  },
+  {
+    "class": "Class 3",
+    "section": "B",
+    "day": "Tuesday",
+    "period": 6,
+    "subject": "Science",
+    "teacher": "Ramesh"
+  },
+  {
+    "class": "Class 3",
+    "section": "B",
+    "day": "Wednesday",
+    "period": 0,
+    "subject": "Math",
+    "teacher": "Sunil"
+  },
+  {
+    "class": "Class 3",
+    "section": "B",
+    "day": "Wednesday",
+    "period": 1,
+    "subject": "Science",
+    "teacher": "Ramesh"
+  },
+  {
+    "class": "Class 3",
+    "section": "B",
+    "day": "Wednesday",
+    "period": 2,
+    "subject": "English",
+    "teacher": "Suresh"
+  },
+  {
+    "class": "Class 3",
+    "section": "B",
+    "day": "Wednesday",
+    "period": 5,
+    "subject": "Math",
+    "teacher": "Sunil"
+  },
+  {
+    "class": "Class 3",
+    "section": "B",
+    "day": "Wednesday",
+    "period": 6,
+    "subject": "Science",
+    "teacher": "Ramesh"
+  },
+  {
+    "class": "Class 3",
+    "section": "B",
+    "day": "Thursday",
+    "period": 0,
+    "subject": "Math",
+    "teacher": "Sunil"
+  },
+  {
+    "class": "Class 3",
+    "section": "B",
+    "day": "Thursday",
+    "period": 1,
+    "subject": "Science",
+    "teacher": "Ramesh"
+  },
+  {
+    "class": "Class 3",
+    "section": "B",
+    "day": "Thursday",
+    "period": 2,
+    "subject": "English",
+    "teacher": "Suresh"
+  },
+  {
+    "class": "Class 3",
+    "section": "B",
+    "day": "Thursday",
+    "period": 5,
+    "subject": "Math",
+    "teacher": "Sunil"
+  },
+  {
+    "class": "Class 3",
+    "section": "B",
+    "day": "Thursday",
+    "period": 6,
+    "subject": "Science",
+    "teacher": "Ramesh"
+  },
+  {
+    "class": "Class 3",
+    "section": "B",
+    "day": "Friday",
+    "period": 0,
+    "subject": "Math",
+    "teacher": "Sunil"
+  },
+  {
+    "class": "Class 3",
+    "section": "B",
+    "day": "Friday",
+    "period": 1,
+    "subject": "Science",
+    "teacher": "Ramesh"
+  },
+  {
+    "class": "Class 3",
+    "section": "B",
+    "day": "Friday",
+    "period": 2,
+    "subject": "English",
+    "teacher": "Suresh"
+  },
+  {
+    "class": "Class 3",
+    "section": "B",
+    "day": "Friday",
+    "period": 5,
+    "subject": "Math",
+    "teacher": "Sunil"
+  },
+  {
+    "class": "Class 3",
+    "section": "B",
+    "day": "Friday",
+    "period": 6,
+    "subject": "Science",
+    "teacher": "Ramesh"
+  }
+]

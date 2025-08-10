@@ -1,0 +1,5 @@
+tkinter
+pandas>=1.5.0
+openpyxl>=3.0.10
+reportlab>=3.6.0
+pyinstaller>=5.0.0
