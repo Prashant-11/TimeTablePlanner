@@ -260,7 +260,56 @@ class TimetableApp:
         # Start time update loop
         self.update_time()
 
-        # Top controls
+        # PROMINENT FIXED SAVE PANEL - Always visible at top
+        save_panel = tk.Frame(self.root, bg="#2d6cdf", relief="raised", borderwidth=4, height=70)
+        save_panel.pack(fill='x', padx=5, pady=5)
+        save_panel.pack_propagate(False)
+        
+        # Save panel content with large save button
+        save_content = tk.Frame(save_panel, bg="#2d6cdf")
+        save_content.pack(expand=True, fill='both', padx=15, pady=10)
+        
+        # Huge prominent save button - impossible to miss
+        self.main_save_btn = tk.Button(save_content, 
+                                      text="💾 SAVE TIMETABLE NOW", 
+                                      command=self.save_timetable,
+                                      font=("Segoe UI", 16, "bold"),
+                                      bg="#28a745", 
+                                      fg="white",
+                                      relief="raised",
+                                      borderwidth=4,
+                                      padx=30,
+                                      pady=10,
+                                      cursor="hand2",
+                                      activebackground="#218838",
+                                      activeforeground="white")
+        self.main_save_btn.pack(side='left')
+        
+        # Auto-save status indicator
+        self.auto_save_indicator = tk.Label(save_content,
+                                           text="🔄 AUTO-SAVE: ENABLED",
+                                           font=("Segoe UI", 12, "bold"),
+                                           bg="#2d6cdf",
+                                           fg="#90EE90")
+        self.auto_save_indicator.pack(side='left', padx=30)
+        
+        # Save status display
+        self.save_status_display = tk.Label(save_content,
+                                           text="📊 Ready to save your timetable",
+                                           font=("Segoe UI", 11),
+                                           bg="#2d6cdf",
+                                           fg="white")
+        self.save_status_display.pack(side='left', padx=20)
+        
+        # Current time in save panel
+        self.save_panel_time = tk.Label(save_content,
+                                       text=f"📅 {self.current_date_str}",
+                                       font=("Segoe UI", 10),
+                                       bg="#2d6cdf",
+                                       fg="white")
+        self.save_panel_time.pack(side='right')
+
+        # Top controls - now below save panel
         controls = ttk.Frame(self.root)
         controls.pack(fill='x', padx=10, pady=5)
 
@@ -270,11 +319,21 @@ class TimetableApp:
         ttk.Label(controls, text="Week:").pack(side='left')
         ttk.Entry(controls, textvariable=self.selected_week, width=4).pack(side='left', padx=5)
         
-        ttk.Button(controls, text="Load", command=self.load_timetable).pack(side='left', padx=5)
-        ttk.Button(controls, text="Save", command=self.save_timetable).pack(side='left', padx=5)
-        ttk.Button(controls, text="Edit Classes", command=self.edit_classes).pack(side='right', padx=5)
-        ttk.Button(controls, text="Edit Sections", command=self.edit_sections).pack(side='right', padx=5)
-        ttk.Button(controls, text="Edit Teachers", command=self.edit_teachers).pack(side='right', padx=5)
+        # Load button (save is now in prominent panel above)
+        ttk.Button(controls, text="📂 Load Timetable", command=self.load_timetable).pack(side='left', padx=10)
+        
+        # Quick status indicator for controls row
+        self.quick_status = ttk.Label(controls, text="� Large SAVE button available above ⬆️", foreground="blue")
+        self.quick_status.pack(side='left', padx=20)
+        
+        # Move edit buttons to separate row to make space
+        edit_frame = ttk.Frame(self.root)
+        edit_frame.pack(fill='x', padx=10, pady=2)
+        
+        ttk.Label(edit_frame, text="Configuration:").pack(side='left', padx=5)
+        ttk.Button(edit_frame, text="Edit Classes", command=self.edit_classes).pack(side='left', padx=5)
+        ttk.Button(edit_frame, text="Edit Sections", command=self.edit_sections).pack(side='left', padx=5)
+        ttk.Button(edit_frame, text="Edit Teachers", command=self.edit_teachers).pack(side='left', padx=5)
         
         # Action buttons
         actions = ttk.Frame(self.root)
@@ -329,6 +388,18 @@ class TimetableApp:
         
         # Initial grid draw
         self.draw_grid()
+        
+        # Status bar at bottom for save feedback
+        status_frame = ttk.Frame(self.root)
+        status_frame.pack(fill='x', side='bottom', padx=10, pady=2)
+        
+        # Save status indicator
+        self.bottom_save_status = ttk.Label(status_frame, text="💾 Save Status: Auto-save enabled | Manual Save button available above", foreground="green", font=("Segoe UI", 9))
+        self.bottom_save_status.pack(side='left')
+        
+        # Current academic info
+        academic_info = ttk.Label(status_frame, text=f"📚 Academic Week {self.current_week} | {self.current_date_str}", font=("Segoe UI", 9))
+        academic_info.pack(side='right')
 
     def update_time(self):
         """Update the time display every minute"""
@@ -572,12 +643,18 @@ class TimetableApp:
                                     self.config['teachers'], class_, section
                                 )
                                 t_cb['values'] = [""] + all_allowed_teachers
+                            
+                            # Auto-save when subject is changed
+                            self.auto_save_changes()
                         
                         def on_teacher_change(event=None, key=cell_key):
                             self.resolved_cells.add(key)
                             self.impacted_cells.discard(key)
                             if key in self.cell_frames:
                                 self.cell_frames[key].configure(style='GreenCell.TFrame')
+                            
+                            # Auto-save when teacher is changed  
+                            self.auto_save_changes()
                         
                         # Bind events
                         subj_cb.bind('<<ComboboxSelected>>', on_subject_change)
@@ -815,7 +892,98 @@ class TimetableApp:
         teacher_cb.focus_set()
         dialog.after(100, analyze_and_show_impact)
 
+    def auto_save_restriction(self, teacher, class_name, section, var):
+        """Auto-save individual teacher restriction changes"""
+        try:
+            # Remove existing restriction for this combination
+            self.c.execute("DELETE FROM teacher_restrictions WHERE teacher=? AND class=? AND section=?", 
+                          (teacher, class_name, section))
+            
+            # Add restriction if checkbox is checked
+            if var.get():
+                self.c.execute("INSERT INTO teacher_restrictions (teacher, class, section) VALUES (?, ?, ?)",
+                              (teacher, class_name, section))
+            
+            self.conn.commit()
+            
+            # Update UI feedback
+            restriction_count = self.c.execute("SELECT COUNT(*) FROM teacher_restrictions WHERE teacher=?", (teacher,)).fetchone()[0]
+            total_restrictions = self.c.execute("SELECT COUNT(*) FROM teacher_restrictions").fetchone()[0]
+            
+            # Show subtle feedback (could add status label if needed)
+            print(f"Auto-saved: {teacher} restriction for {class_name}-{section} ({'added' if var.get() else 'removed'})")
+            print(f"Teacher {teacher} now has {restriction_count} restrictions, total: {total_restrictions}")
+            
+            # Refresh teacher dropdowns to reflect changes
+            self.refresh_teacher_dropdowns()
+            
+        except Exception as e:
+            print(f"Auto-save restriction error: {e}")
+    
+    def auto_save_changes(self):
+        """Auto-save changes with a small delay to avoid excessive saves"""
+        if hasattr(self, '_save_timer'):
+            self.root.after_cancel(self._save_timer)
+        
+        # Save after 2 seconds of inactivity
+        self._save_timer = self.root.after(2000, self._perform_auto_save)
+    
+    def _perform_auto_save(self):
+        """Perform the actual auto-save"""
+        try:
+            year = self.selected_year.get()
+            week = self.selected_week.get()
+            
+            # Clear old data for this week
+            self.c.execute("DELETE FROM timetable WHERE year=? AND week=?", (year, week))
+            
+            # Save current grid - only cells with both subject and teacher
+            saved_count = 0
+            for (class_, section, day, period), (subj_var, teacher_var) in self.entries.items():
+                subject = subj_var.get().strip()
+                teacher = teacher_var.get().strip()
+                if subject and teacher:  # Only save filled cells
+                    self.c.execute('''
+                        INSERT INTO timetable (year, week, class, section, day, period, subject, teacher)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (year, week, class_, section, day, period, subject, teacher))
+                    saved_count += 1
+                    
+            self.conn.commit()
+            
+            # Update prominent save panel indicators
+            current_time = datetime.now().strftime("%I:%M %p")
+            
+            if hasattr(self, 'auto_save_indicator'):
+                self.auto_save_indicator.config(text=f"✅ AUTO-SAVED: {saved_count} entries", fg="#90EE90")
+                # Reset after 4 seconds
+                self.root.after(4000, lambda: self.auto_save_indicator.config(text="🔄 AUTO-SAVE: ENABLED", fg="#90EE90"))
+            
+            if hasattr(self, 'save_status_display'):
+                self.save_status_display.config(text=f"📊 Last auto-save: {saved_count} entries at {current_time}")
+            
+            if hasattr(self, 'save_count_label'):
+                self.save_count_label.config(text=f"📊 Entries: {saved_count} saved")
+            
+            if hasattr(self, 'last_save_label'):
+                self.last_save_label.config(text=f"⏰ Auto-saved: {current_time}")
+            
+            # Update status label if exists (old one)
+            if hasattr(self, 'save_status_label'):
+                self.save_status_label.config(text=f"✅ Auto-Saved: {saved_count} entries", foreground="green")
+                # Reset status after 3 seconds
+                self.root.after(3000, lambda: self.save_status_label.config(text="🔄 Auto-Save: ON", foreground="green"))
+            
+            self.root.title(f"ClassFlow v1.3 - Auto-saved {saved_count} entries ✓")
+            
+            # Reset title after 3 seconds
+            self.root.after(3000, lambda: self.root.title("ClassFlow v1.3"))
+            
+        except Exception as e:
+            print(f"Auto-save error: {e}")
+    
     def save_timetable(self):
+        """Manual save with confirmation"""
         year = self.selected_year.get()
         week = self.selected_week.get()
         
@@ -823,15 +991,40 @@ class TimetableApp:
         self.c.execute("DELETE FROM timetable WHERE year=? AND week=?", (year, week))
         
         # Save current grid
+        saved_count = 0
         for (class_, section, day, period), (subj_var, teacher_var) in self.entries.items():
-            if subj_var.get() and teacher_var.get():  # Only save filled cells
+            subject = subj_var.get().strip()
+            teacher = teacher_var.get().strip()
+            if subject and teacher:  # Only save filled cells
                 self.c.execute('''
                     INSERT INTO timetable (year, week, class, section, day, period, subject, teacher)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (year, week, class_, section, day, period, subj_var.get(), teacher_var.get()))
+                ''', (year, week, class_, section, day, period, subject, teacher))
+                saved_count += 1
                 
         self.conn.commit()
-        messagebox.showinfo("Success", "Timetable saved")
+        
+        # Update prominent save panel indicators
+        current_time = datetime.now().strftime("%I:%M %p")
+        
+        if hasattr(self, 'auto_save_indicator'):
+            self.auto_save_indicator.config(text=f"💾 MANUAL SAVE: {saved_count} entries", fg="#FFD700")
+            # Reset after 6 seconds
+            self.root.after(6000, lambda: self.auto_save_indicator.config(text="🔄 AUTO-SAVE: ENABLED", fg="#90EE90"))
+        
+        if hasattr(self, 'save_status_display'):
+            self.save_status_display.config(text=f"📊 Manual save: {saved_count} entries at {current_time}")
+        
+        if hasattr(self, 'last_save_label'):
+            self.last_save_label.config(text=f"⏰ Manual save: {current_time}")
+        
+        # Update status label if exists (old one)
+        if hasattr(self, 'save_status_label'):
+            self.save_status_label.config(text=f"💾 Manual Save: {saved_count} entries", foreground="blue")
+            # Reset status after 5 seconds
+            self.root.after(5000, lambda: self.save_status_label.config(text="🔄 Auto-Save: ON", foreground="green"))
+        
+        messagebox.showinfo("Manual Save", f"Timetable manually saved!\n\n✅ {saved_count} entries saved for Year {year}, Week {week}\n\n💡 Note: Changes are also auto-saved as you work")
 
     def load_timetable(self):
         year = self.selected_year.get()
@@ -870,6 +1063,12 @@ class TimetableApp:
                             available_teachers = [t for t, subjs in teacher_subjects.items() if subject in subjs]
                         else:
                             available_teachers = self.config['teachers']
+                        
+                        # Further filter by class-section restrictions
+                        available_teachers = self.filter_teachers_by_restrictions(
+                            available_teachers, class_, section
+                        )
+                        
                         teacher_cb['values'] = [""] + available_teachers
                     
                     rows_loaded += 1
@@ -883,6 +1082,39 @@ class TimetableApp:
             messagebox.showerror("Load Error", f"Failed to load timetable:\n{str(e)}")
             print(f"Load error: {e}")
 
+    def refresh_teacher_dropdowns(self):
+        """Refresh all teacher dropdowns to respect current restrictions"""
+        if not hasattr(self, 'entries') or not self.entries:
+            return
+            
+        teacher_subjects = self.config.get('teacher_subjects', {})
+        
+        for cell_key in self.entries:
+            class_, section, day, period = cell_key
+            if cell_key in self.teacher_cbs:
+                teacher_cb = self.teacher_cbs[cell_key]
+                subj_var, teacher_var = self.entries[cell_key]
+                current_subject = subj_var.get()
+                
+                if current_subject and current_subject != "":
+                    # Filter by subject first
+                    if teacher_subjects:
+                        available_teachers = [teacher for teacher, subjects in teacher_subjects.items() 
+                                            if current_subject in subjects]
+                    else:
+                        available_teachers = self.config['teachers']
+                else:
+                    # No subject selected, show all teachers for this class-section
+                    available_teachers = self.config['teachers']
+                
+                # Filter by class-section restrictions
+                available_teachers = self.filter_teachers_by_restrictions(
+                    available_teachers, class_, section
+                )
+                
+                # Update dropdown
+                teacher_cb['values'] = [""] + available_teachers
+    
     def auto_assign(self):
         # Auto-assign both subjects and teachers for all periods
         teacher_subjects = self.config.get('teacher_subjects', {})
@@ -969,7 +1201,22 @@ class TimetableApp:
         # Update the display
         self.grid_frame.update_idletasks()
         self.grid_canvas.configure(scrollregion=self.grid_canvas.bbox("all"))
-        messagebox.showinfo("Success", f"Auto-assign completed!\nFilled {filled_count} out of {total_cells} timetable slots")
+        
+        # Check if teacher restrictions are active
+        self.c.execute("SELECT COUNT(*) FROM teacher_restrictions")
+        restriction_count = self.c.fetchone()[0]
+        
+        if restriction_count > 0:
+            messagebox.showinfo("Success", 
+                f"Auto-assign completed with Teacher Restrictions applied!\n\n"
+                f"✅ Filled {filled_count} out of {total_cells} timetable slots\n"
+                f"🔒 {restriction_count} teacher class-section restrictions respected\n"
+                f"📝 Only allowed teachers assigned to each class-section")
+        else:
+            messagebox.showinfo("Success", 
+                f"Auto-assign completed!\n\n"
+                f"✅ Filled {filled_count} out of {total_cells} timetable slots\n"
+                f"ℹ️ No teacher restrictions configured - all teachers available")
 
     def smart_match(self):
         # Validate that no teacher is assigned to more than one subject at the same time (case-insensitive)
@@ -1208,34 +1455,160 @@ class TimetableApp:
     def show_teacher_restrictions(self):
         """Show a dialog to manage teacher class-section restrictions"""
         win = tk.Toplevel(self.root)
-        win.title("Teacher Class-Section Restrictions")
-        win.geometry("900x700")
+        win.title("ClassFlow - Teacher Class-Section Restrictions")
+        win.geometry("1000x750")
         win.resizable(True, True)
+        win.configure(bg="#f8f9fa")
         
-        # Main frame
-        main_frame = ttk.Frame(win)
-        main_frame.pack(fill='both', expand=True, padx=15, pady=15)
+        # Make window modal and center it
+        win.transient(self.root)
+        win.grab_set()
         
-        # Title header
-        title_label = ttk.Label(main_frame, 
+        # Center the window
+        win.update_idletasks()
+        x = (win.winfo_screenwidth() // 2) - (1000 // 2)
+        y = (win.winfo_screenheight() // 2) - (750 // 2)
+        win.geometry(f"1000x750+{x}+{y}")
+        
+        # Main frame with better styling
+        main_frame = tk.Frame(win, bg="#f8f9fa")
+        main_frame.pack(fill='both', expand=True, padx=20, pady=20)
+        
+        # Title header with save button at top right
+        title_frame = tk.Frame(main_frame, bg="#2d6cdf", height=80)
+        title_frame.pack(fill='x', pady=(0, 20))
+        title_frame.pack_propagate(False)
+        
+        # Title on the left
+        title_label = tk.Label(title_frame, 
             text="🎯 Teacher Class-Section Restrictions", 
-            font=("Segoe UI", 16, "bold"),
-            foreground="#2d6cdf")
-        title_label.pack(anchor='w', pady=(0, 10))
+            font=("Segoe UI", 18, "bold"),
+            foreground="white",
+            bg="#2d6cdf")
+        title_label.pack(side='left', expand=True, pady=20, padx=20)
         
-        # Instructions
-        instruction_label = ttk.Label(main_frame, 
-            text="Configure which classes and sections each teacher can teach. Click on teacher tabs below:", 
+        # Save functions
+        def save_restrictions():
+            """Manual save function - mainly for user confidence and final confirmation"""
+            try:
+                # Count current restrictions to show in confirmation
+                self.c.execute("SELECT COUNT(*) FROM teacher_restrictions")
+                total_restrictions = self.c.fetchone()[0]
+                
+                # Since auto-save is working, this is mainly for user feedback
+                # Refresh teacher dropdowns to ensure consistency
+                self.refresh_teacher_dropdowns()
+                
+                win.destroy()
+                messagebox.showinfo("Teacher Restrictions Saved", 
+                    f"✅ Teacher Restrictions Confirmed!\n\n"
+                    f"📊 Total Restrictions: {total_restrictions} class-section combinations\n"
+                    f"🔄 Auto-save was active: All changes already saved automatically\n"
+                    f"🎯 Teacher dropdowns updated: Only allowed teachers shown in each cell\n\n"
+                    f"💡 Your restrictions are now active in the main timetable!")
+                
+            except Exception as e:
+                messagebox.showerror("Error", f"Error confirming restrictions: {str(e)}")
+        
+        def cancel():
+            """Cancel and close dialog"""
+            result = messagebox.askyesno("Close Teacher Restrictions", 
+                "Close Teacher Restrictions dialog?\n\n"
+                "✅ All changes have been auto-saved automatically\n"
+                "📝 No data will be lost")
+            if result:
+                win.destroy()
+        
+        # PROMINENT SAVE BUTTON - TOP RIGHT POSITION
+        save_btn = tk.Button(title_frame, 
+                            text="💾 SAVE & APPLY", 
+                            command=save_restrictions,
+                            font=("Segoe UI", 12, "bold"),
+                            bg="#28a745",
+                            fg="white",
+                            relief="raised",
+                            borderwidth=3,
+                            padx=25,
+                            pady=10,
+                            cursor="hand2",
+                            activebackground="#218838",
+                            activeforeground="white")
+        save_btn.pack(side='right', padx=(10, 20), pady=15)
+        
+        # Add hover effects for save button
+        def on_save_enter(event):
+            save_btn.config(bg="#218838", relief="raised", borderwidth=4)
+        def on_save_leave(event):
+            save_btn.config(bg="#28a745", relief="raised", borderwidth=3)
+        save_btn.bind("<Enter>", on_save_enter)
+        save_btn.bind("<Leave>", on_save_leave)
+        
+        # Close button next to save
+        close_btn = tk.Button(title_frame,
+                              text="❌ CLOSE",
+                              command=cancel,
+                              font=("Segoe UI", 10),
+                              bg="#dc3545",
+                              fg="white", 
+                              relief="raised",
+                              borderwidth=2,
+                              padx=15,
+                              pady=10,
+                              cursor="hand2",
+                              activebackground="#c82333",
+                              activeforeground="white")
+        close_btn.pack(side='right', padx=(0, 10), pady=15)
+        
+        # Add hover effects for close button
+        def on_close_enter(event):
+            close_btn.config(bg="#c82333")
+        def on_close_leave(event):
+            close_btn.config(bg="#dc3545")
+        close_btn.bind("<Enter>", on_close_enter)
+        close_btn.bind("<Leave>", on_close_leave)
+        
+        # Instructions with better styling and auto-save notice
+        instructions_frame = tk.Frame(main_frame, bg="#e9ecef", relief="solid", borderwidth=1)
+        instructions_frame.pack(fill='x', pady=(0, 20))
+        
+        instruction_label = tk.Label(instructions_frame, 
+            text="📋 Configure which classes and sections each teacher can teach by clicking on teacher tabs below:\n✅ Changes are AUTOMATICALLY SAVED as you check/uncheck boxes - No manual saving needed!\n💾 Use the GREEN SAVE BUTTON at top-right for final confirmation and feedback", 
             font=("Segoe UI", 11),
-            foreground="#555555")
-        instruction_label.pack(anchor='w', pady=(0, 15))
+            foreground="#495057",
+            bg="#e9ecef",
+            wraplength=900,
+            justify="left",
+            padx=20,
+            pady=15)
+        instruction_label.pack(anchor='w')
         
-        # Create notebook for teachers with better styling
+        # Create notebook for teachers with better styling - now takes full remaining space
+        notebook_frame = tk.Frame(main_frame, bg="#f8f9fa")
+        notebook_frame.pack(fill='both', expand=True, pady=(0, 10))
+        
         style = ttk.Style()
-        style.configure('Teacher.TNotebook.Tab', padding=[20, 8])
         
-        notebook = ttk.Notebook(main_frame, style='Teacher.TNotebook')
-        notebook.pack(fill='both', expand=True, pady=(0, 15))
+        # Configure tab styling for better visibility
+        style.configure('Teacher.TNotebook', 
+                       tabposition='n',
+                       background="#f8f9fa")
+        style.configure('Teacher.TNotebook.Tab', 
+                       padding=[20, 12], 
+                       font=('Segoe UI', 10, 'bold'),
+                       focuscolor="none")
+        
+        # Map styles for different states
+        style.map('Teacher.TNotebook.Tab',
+                 background=[('selected', '#2d6cdf'),
+                            ('active', '#5a9cff'),
+                            ('!active', '#dee2e6')],
+                 foreground=[('selected', 'white'),
+                            ('active', 'white'),
+                            ('!active', '#495057')],
+                 expand=[('selected', [2, 2, 2, 0])])
+        
+        notebook = ttk.Notebook(notebook_frame, style='Teacher.TNotebook')
+        notebook.pack(fill='both', expand=True)
         
         # Store teacher restriction data
         teacher_restrictions = {}
@@ -1251,162 +1624,277 @@ class TimetableApp:
         # Create tab for each teacher
         for teacher in self.config['teachers']:
             # Check if teacher has existing restrictions
-            has_restrictions = teacher in existing_restrictions and len(existing_restrictions[teacher]) > 0
-            tab_text = f"👨‍🏫 {teacher}" if has_restrictions else f"🆕 {teacher}"
+            existing_for_teacher = existing_restrictions.get(teacher, [])
+            has_restrictions = len(existing_for_teacher) > 0
             
-            # Teacher frame
-            teacher_frame = ttk.Frame(notebook)
+            # Create more descriptive tab text with better icons
+            if has_restrictions:
+                tab_text = f"�‍🏫 {teacher} ({len(existing_for_teacher)})"
+                tab_tooltip = f"{teacher} has {len(existing_for_teacher)} class-section restrictions"
+            else:
+                tab_text = f"👤 {teacher} (All)"
+                tab_tooltip = f"{teacher} can teach any class-section (no restrictions)"
+            
+            # Teacher frame with better styling
+            teacher_frame = tk.Frame(notebook, bg="#ffffff")
             notebook.add(teacher_frame, text=tab_text)
             
-            # Create scrollable frame for this teacher
-            canvas = tk.Canvas(teacher_frame, highlightthickness=0)
-            scrollbar = ttk.Scrollbar(teacher_frame, orient="vertical", command=canvas.yview)
-            scrollable_frame = ttk.Frame(canvas)
+            # Create a modern container with padding
+            container = ttk.Frame(teacher_frame)
+            container.pack(fill='both', expand=True, padx=20, pady=20)
             
-            scrollable_frame.bind(
-                "<Configure>",
-                lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-            )
+            # Teacher name header - make it more prominent with better styling
+            header_frame = ttk.Frame(container)
+            header_frame.pack(fill='x', pady=(0, 20))
             
-            canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-            canvas.configure(yscrollcommand=scrollbar.set)
+            teacher_icon = "👩‍🏫" if "female" in teacher.lower() or any(name in teacher.lower() for name in ["priya", "sita", "maya", "rita"]) else "👨‍🏫"
             
-            # Pack canvas and scrollbar
-            canvas.pack(side="left", fill="both", expand=True)
-            scrollbar.pack(side="right", fill="y")
+            teacher_header = tk.Label(header_frame, 
+                text=f"{teacher_icon} {teacher}",
+                font=("Segoe UI", 18, "bold"),
+                foreground="#2d6cdf",
+                bg="#f8f9fa",
+                relief="solid",
+                borderwidth=1,
+                padx=20,
+                pady=10)
+            teacher_header.pack(anchor='w')
             
-            # Teacher name header - make it prominent
-            teacher_header = ttk.Label(scrollable_frame, 
-                text=f"🧑‍🏫 Teacher: {teacher}",
-                font=("Segoe UI", 14, "bold"),
-                foreground="#2d6cdf")
-            teacher_header.pack(anchor='w', pady=(10, 5), padx=10)
-            
-            # Status indicator
+            # Status indicator with better styling
             existing_for_teacher = existing_restrictions.get(teacher, [])
             if existing_for_teacher:
-                status_text = f"✅ Current Status: {len(existing_for_teacher)} class-section combinations allowed"
+                status_text = f"✅ Restrictions Active: {len(existing_for_teacher)} class-section combinations allowed"
                 status_color = "#28a745"
+                status_bg = "#d4edda"
             else:
-                status_text = "ℹ️ Current Status: No restrictions (can teach any class-section)"
+                status_text = "ℹ️ No Restrictions: Can teach any class-section combination"
                 status_color = "#6c757d"
+                status_bg = "#e2e3e5"
             
-            status_label = ttk.Label(scrollable_frame,
+            status_frame = tk.Frame(header_frame, bg=status_bg, relief="solid", borderwidth=1)
+            status_frame.pack(fill='x', pady=(10, 0))
+            
+            status_label = tk.Label(status_frame,
                 text=status_text,
+                font=("Segoe UI", 10, "bold"),
+                foreground=status_color,
+                bg=status_bg,
+                padx=15,
+                pady=8)
+            status_label.pack(anchor='w')
+            
+            # Instructions for this teacher with better styling
+            instructions_frame = ttk.Frame(container)
+            instructions_frame.pack(fill='x', pady=(0, 20))
+            
+            teacher_instruction = tk.Label(instructions_frame, 
+                text=f"📚 Configure class-section restrictions for {teacher}:",
+                font=("Segoe UI", 12, "bold"),
+                foreground="#495057")
+            teacher_instruction.pack(anchor='w', pady=(0, 5))
+            
+            helper_text = tk.Label(instructions_frame,
+                text="✓ Check the boxes for classes and sections this teacher can teach\n✗ Uncheck to restrict access to those combinations",
                 font=("Segoe UI", 9),
-                foreground=status_color)
-            status_label.pack(anchor='w', pady=(0, 5), padx=10)
+                foreground="#6c757d")
+            helper_text.pack(anchor='w')
             
-            # Separator line
-            separator = ttk.Separator(scrollable_frame, orient='horizontal')
-            separator.pack(fill='x', pady=(5, 10), padx=10)
+            # Create scrollable frame for class-section options with proper configuration
+            scroll_container = ttk.Frame(container)
+            scroll_container.pack(fill='both', expand=True)
             
-            # Instructions for this teacher
-            teacher_instruction = ttk.Label(scrollable_frame, 
-                text=f"Select the classes and sections that {teacher} is allowed to teach:",
-                font=("Segoe UI", 10),
-                foreground="#333333")
-            teacher_instruction.pack(anchor='w', pady=(0, 15), padx=10)
+            # Create canvas with proper dimensions
+            canvas = tk.Canvas(scroll_container, 
+                              highlightthickness=0, 
+                              bg="#ffffff",
+                              height=400,  # Set specific height
+                              relief="sunken",
+                              borderwidth=1)
+            
+            # Create scrollbar with proper binding
+            scrollbar = ttk.Scrollbar(scroll_container, orient="vertical", command=canvas.yview)
+            scrollable_frame = ttk.Frame(canvas)
+            
+            # Bind frame configuration to update canvas scroll region
+            def configure_scroll_region(event=None):
+                canvas.configure(scrollregion=canvas.bbox("all"))
+            
+            scrollable_frame.bind("<Configure>", configure_scroll_region)
+            
+            # Create window in canvas
+            canvas_window = canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+            
+            # Bind canvas width to frame width
+            def configure_canvas_width(event):
+                canvas_width = event.width
+                canvas.itemconfig(canvas_window, width=canvas_width)
+            
+            canvas.bind('<Configure>', configure_canvas_width)
+            canvas.configure(yscrollcommand=scrollbar.set)
+            
+            # Pack canvas and scrollbar properly
+            canvas.pack(side="left", fill="both", expand=True)
+            scrollbar.pack(side="right", fill="y")
             
             # Create checkboxes for each class-section combination
             teacher_restrictions[teacher] = {}
             existing_for_teacher = existing_restrictions.get(teacher, [])
             
+            # Add padding to scrollable content
+            content_frame = ttk.Frame(scrollable_frame)
+            content_frame.pack(fill='both', expand=True, padx=10, pady=10)
+            
             for class_name in self.config['classes']:
-                # Class frame with better styling
-                class_frame = ttk.LabelFrame(scrollable_frame, 
+                # Class frame with modern card styling
+                class_frame = tk.Frame(content_frame, 
+                    bg="#ffffff",
+                    relief="solid", 
+                    borderwidth=2,
+                    highlightbackground="#dee2e6",
+                    highlightthickness=1)
+                class_frame.pack(fill='x', pady=8, padx=5)
+                
+                # Class header with icon and styling
+                class_header_frame = tk.Frame(class_frame, bg="#f8f9fa", height=40)
+                class_header_frame.pack(fill='x', padx=2, pady=2)
+                class_header_frame.pack_propagate(False)
+                
+                class_title = tk.Label(class_header_frame, 
                     text=f"📚 {class_name}", 
-                    padding=10)
-                class_frame.pack(fill='x', pady=8, padx=15)
+                    font=("Segoe UI", 12, "bold"),
+                    bg="#f8f9fa",
+                    fg="#495057")
+                class_title.pack(side='left', padx=15, pady=8)
+                
+                # Count of selected sections for this class
+                selected_count = sum(1 for cls, sec in existing_for_teacher if cls == class_name)
+                if selected_count > 0:
+                    count_label = tk.Label(class_header_frame,
+                        text=f"✓ {selected_count} sections",
+                        font=("Segoe UI", 9, "bold"),
+                        bg="#d4edda",
+                        fg="#155724",
+                        padx=8,
+                        pady=2)
+                    count_label.pack(side='right', padx=15, pady=8)
                 
                 # Section checkboxes with better layout
-                section_frame = ttk.Frame(class_frame)
-                section_frame.pack(fill='x')
+                section_content_frame = tk.Frame(class_frame, bg="#ffffff")
+                section_content_frame.pack(fill='x', padx=15, pady=10)
                 
-                # Add a label for sections
-                section_label = ttk.Label(section_frame, 
-                    text="Allowed Sections:", 
-                    font=("Segoe UI", 9, "bold"))
-                section_label.pack(anchor='w', pady=(0, 5))
+                # Add a subtle label for sections
+                section_label = tk.Label(section_content_frame, 
+                    text="Available Sections:", 
+                    font=("Segoe UI", 10, "bold"),
+                    bg="#ffffff",
+                    fg="#6c757d")
+                section_label.pack(anchor='w', pady=(0, 8))
                 
-                # Create a grid layout for sections
-                checkbox_frame = ttk.Frame(section_frame)
-                checkbox_frame.pack(fill='x')
+                # Create a grid layout for sections with better spacing and proper functionality
+                checkbox_container = tk.Frame(section_content_frame, bg="#ffffff")
+                checkbox_container.pack(fill='x', pady=5)
                 
+                # Use grid layout for better control
+                sections_per_row = 3  # Display 3 sections per row
+                row = 0
                 col = 0
+                
                 for section in self.config['sections']:
                     var = tk.BooleanVar()
                     # Check if this combination exists in restrictions
                     if (class_name, section) in existing_for_teacher:
                         var.set(True)
                     
-                    cb = ttk.Checkbutton(checkbox_frame, 
+                    # Create a frame for each checkbox with proper padding
+                    cb_frame = tk.Frame(checkbox_container, 
+                                       bg="#ffffff",
+                                       relief="flat",
+                                       borderwidth=0,
+                                       padx=5,
+                                       pady=3)
+                    cb_frame.grid(row=row, column=col, sticky='ew', padx=8, pady=4)
+                    
+                    # Configure grid weight for proper expansion
+                    checkbox_container.grid_columnconfigure(col, weight=1)
+                    
+                    # Create checkbutton with improved styling and functionality
+                    cb = tk.Checkbutton(cb_frame, 
                         text=f"Section {section}", 
                         variable=var,
-                        style='TCheckbutton')
-                    cb.grid(row=0, column=col, sticky='w', padx=15, pady=2)
+                        font=("Segoe UI", 10),
+                        bg="#ffffff",
+                        fg="#495057",
+                        activebackground="#e9ecef",
+                        activeforeground="#495057",
+                        selectcolor="#ffffff",
+                        borderwidth=2,
+                        highlightthickness=0,
+                        relief="solid",
+                        indicatoron=True,
+                        cursor="hand2",
+                        anchor="w",
+                        padx=8,
+                        pady=5,
+                        command=lambda t=teacher, c=class_name, s=section, v=var: self.auto_save_restriction(t, c, s, v))
+                    cb.pack(fill='x', anchor='w')
+                    
+                    # Move to next position
                     col += 1
+                    if col >= sections_per_row:
+                        col = 0
+                        row += 1
                     
                     # Store the variable
                     if class_name not in teacher_restrictions[teacher]:
                         teacher_restrictions[teacher][class_name] = {}
                     teacher_restrictions[teacher][class_name][section] = var
             
-            # Enable mouse wheel scrolling for this canvas
-            def make_scroll_handler(canvas):
-                def _on_mousewheel(event):
-                    canvas.yview_scroll(int(-1*(event.delta/120)), "units")
-                return _on_mousewheel
+            # Enable mouse wheel scrolling with proper event binding
+            def bind_mousewheel(event):
+                def _on_mousewheel(e):
+                    canvas.yview_scroll(int(-1*(e.delta/120)), "units")
+                canvas.bind_all("<MouseWheel>", _on_mousewheel)
             
-            scroll_handler = make_scroll_handler(canvas)
-            canvas.bind_all("<MouseWheel>", scroll_handler)
+            def unbind_mousewheel(event):
+                canvas.unbind_all("<MouseWheel>")
+            
+            # Bind events when mouse enters/leaves the canvas
+            canvas.bind('<Enter>', bind_mousewheel)
+            canvas.bind('<Leave>', unbind_mousewheel)
+            
+            # Also bind to scrollable_frame for better coverage
+            scrollable_frame.bind('<Enter>', bind_mousewheel)
+            scrollable_frame.bind('<Leave>', unbind_mousewheel)
+            
+            # Set initial focus to enable scrolling
+            canvas.focus_set()
         
-        # Button frame at bottom
-        button_frame = ttk.Frame(win)
-        button_frame.pack(fill='x', padx=10, pady=(0, 10))
+        # Add Hypersync footer with better styling
+        footer_frame = tk.Frame(win, bg="#343a40", height=40)
+        footer_frame.pack(fill='x', side='bottom')
+        footer_frame.pack_propagate(False)
         
-        # Add Hypersync footer
-        footer_frame = ttk.Frame(win)
-        footer_frame.pack(fill='x', padx=10, pady=(5, 0))
+        footer_label = tk.Label(footer_frame, 
+                                text="Hypersync - An AI based education startup", 
+                                font=("Segoe UI", 10, "bold"),
+                                foreground="#ffffff",
+                                bg="#343a40")
+        footer_label.pack(expand=True, pady=10)
         
-        footer_label = ttk.Label(footer_frame, text="Hypersync - An AI based education startup", 
-                                font=("Segoe UI", 9), foreground="#666666")
-        footer_label.pack(anchor='center')
-        
-        def save_restrictions():
-            """Save teacher restrictions to database"""
-            try:
-                # Clear existing restrictions
-                self.c.execute("DELETE FROM teacher_restrictions")
-                
-                # Insert new restrictions
-                for teacher in teacher_restrictions:
-                    for class_name in teacher_restrictions[teacher]:
-                        for section in teacher_restrictions[teacher][class_name]:
-                            if teacher_restrictions[teacher][class_name][section].get():
-                                self.c.execute(
-                                    "INSERT INTO teacher_restrictions (teacher, class, section) VALUES (?, ?, ?)",
-                                    (teacher, class_name, section)
-                                )
-                
-                self.conn.commit()
-                win.destroy()
-                messagebox.showinfo("Success", "Teacher restrictions saved successfully!")
-                
-            except Exception as e:
-                messagebox.showerror("Error", f"Failed to save restrictions: {str(e)}")
-        
-        def cancel():
-            win.destroy()
-        
-        # Buttons
-        ttk.Button(button_frame, text="Save & Close", command=save_restrictions, 
-                  style='Green.TButton').pack(side='right', padx=5)
-        ttk.Button(button_frame, text="Cancel", command=cancel).pack(side='right', padx=5)
-        
-        # Focus on window
+        # Focus and keyboard bindings
         win.focus_set()
-        win.grab_set()  # Make window modal
+        win.lift()  # Bring window to front
+        
+        # Bind keyboard shortcuts
+        win.bind('<Return>', lambda e: save_restrictions())
+        win.bind('<Escape>', lambda e: cancel())
+        win.bind('<Control-s>', lambda e: save_restrictions())
+        
+        # Set focus to first tab
+        notebook.focus_set()
+        
+        # Protocol for window close button
+        win.protocol("WM_DELETE_WINDOW", cancel)
 
 if __name__ == "__main__":
     print("Launching Timetable Planner...")
