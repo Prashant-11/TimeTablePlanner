@@ -1,137 +1,113 @@
-# Class Flow - School Timetable Planner
+# ClassFlow - Smart Timetable Management System
 
-## 🎯 Base Product - Version 1.0
+![ClassFlow Logo](https://img.shields.io/badge/ClassFlow-v2.0-blue?style=for-the-badge&logo=calendar)
+![License](https://img.shields.io/badge/License-Freemium-green?style=for-the-badge)
+![Platform](https://img.shields.io/badge/Platform-Windows-lightgrey?style=for-the-badge&logo=windows)
+![Build Status](https://img.shields.io/badge/Build-Stable-success?style=for-the-badge)
 
-**Class Flow** is a comprehensive school timetable management system built with Python Tkinter. This is the base product that will be customized for different clients.
-
-### 🌟 Key Features
-
-- **Dynamic Timetable Grid**: Scrollable interface supporting multiple classes and sections
-- **Auto-Assign Intelligence**: Smart teacher and subject assignment
-- **Teacher Leave Management**: Complete workflow with impact analysis and substitute assignment
-- **Export Capabilities**: Excel (multi-worksheet) and PDF export
-- **Smart Conflict Detection**: Validates teacher assignments and scheduling conflicts
-- **Teacher Mapping**: Flexible subject-teacher assignment system
-- **Data Persistence**: SQLite database with year/week organization
-
-### 🔧 Technical Stack
-
-- **Python 3.11.4**: Core development language
-- **Tkinter**: GUI framework with enhanced scrolling
-- **SQLite**: Database for persistent storage
-- **pandas + openpyxl**: Excel export functionality
-- **reportlab**: PDF generation
-- **PyInstaller**: Executable packaging
-
-### 📁 Project Structure
-
-```
-Class Flow Base/
-├── school_timetable_planner_new.py    # Main application file
-├── config.json                        # Dynamic configuration
-├── timetable.db                        # SQLite database
-├── generate_help_pdf.py               # Help documentation generator
-├── TimetablePlanner_Help.pdf          # User manual
-├── TimetablePlanner_Help.txt          # Text documentation
-├── TimetablePlannerApp/                # Distribution folder
-│   ├── dist/ClassFlow.exe             # Standalone executable
-│   └── build/                         # Build artifacts
-└── Documents/                         # Additional documentation
-
-# Future Structure (Client-specific):
-clients/
-├── client-a/                          # Custom version for Client A
-├── client-b/                          # Custom version for Client B
-└── README.md                         # Client setup instructions
-```
-
-### 🚀 Quick Start
-
-1. **Standalone Executable**: Run `TimetablePlannerApp/dist/ClassFlow.exe`
-2. **Python Development**: Run `python school_timetable_planner_new.py`
-
-### 📋 Current Features
-
-#### Core Functionality
-- ✅ Internet connectivity validation
-- ✅ Current week display in header
-- ✅ Dynamic class/section/teacher management
-- ✅ Editable teacher assignments (combobox dropdowns)
-- ✅ Enhanced scrolling (horizontal + vertical)
-
-#### Teacher Leave Management
-- ✅ Professional dialog with step-by-step workflow
-- ✅ Real-time impact analysis
-- ✅ Substitute teacher selection
-- ✅ Visual feedback (red cells for impacted periods)
-- ✅ Detailed confirmation messages
-
-#### Export & Reports
-- ✅ Excel export with separate worksheets per class
-- ✅ PDF export with professional formatting
-- ✅ Help documentation generation
-
-#### Data Management
-- ✅ Save/Load timetables by year and week
-- ✅ Teacher-subject mapping configuration
-- ✅ Smart conflict detection and resolution
-
-### 🔮 Future Roadmap
-
-#### Planned Features for Client Versions
-- 🔐 **Licensing System**: 30-day trial with activation
-- 👨‍💼 **Admin Screen**: User management and system settings
-- 📱 **Contact Management**: Mobile number updates and communication
-- 🎨 **Custom Branding**: Client-specific logos and themes
-- 🌐 **Multi-language Support**: Localization for different regions
-- ☁️ **Cloud Sync**: Optional cloud backup and synchronization
-- 📊 **Advanced Reports**: Attendance, workload analysis, etc.
-
-### 🏗️ Development Setup
-
-#### Requirements
-- Python 3.11.4+
-- pip packages: `tkinter pandas openpyxl reportlab pyinstaller`
-
-#### Building Executable
-```bash
-cd TimetablePlannerApp
-pyinstaller --onefile --windowed --name="ClassFlow" school_timetable_planner_new.py
-```
-
-### 📝 Configuration
-
-The `config.json` file contains:
-- Classes and sections
-- Teachers and subjects
-- Teacher-subject mappings
-- System settings
-
-### 💾 Database Schema
-
-SQLite database (`timetable.db`) with tables:
-- `timetable`: Main timetable data (year, week, class, section, day, period, subject, teacher)
-
-### 🎯 Client Customization Strategy
-
-Each client will have:
-1. **Separate branch**: `client-{name}` in Git
-2. **Custom config**: Client-specific settings and branding
-3. **License integration**: Trial and activation system
-4. **Feature toggles**: Enable/disable features per client
-5. **Custom executable**: Branded with client name
-
-### 🔧 Support & Maintenance
-
-- **Base Product Updates**: Merged into client branches
-- **Client-Specific Features**: Developed in separate branches
-- **Bug Fixes**: Applied to base and propagated to clients
-- **Version Management**: Semantic versioning (v1.x.x)
-
-### 📞 Contact
-
-For development and customization inquiries, contact the development team.
+## 🌐 **Visit Our Official Website**
+### 👉 [**prashant-11.github.io/TimeTablePlanner**](https://prashant-11.github.io/TimeTablePlanner/) 👈
 
 ---
 
-**Built with ❤️ for educational institutions**
+## 🚀 Revolutionary Freemium Timetable Management
+
+ClassFlow v2.0 is a cutting-edge timetable management system designed for schools and educational institutions. With intelligent auto-assignment, advanced teacher restrictions, and seamless leave management, ClassFlow transforms how educational institutions handle scheduling.
+
+### ✨ Key Features
+
+- 🤖 **Auto-Assignment**: Intelligent algorithms for optimal teacher-class scheduling
+- 👥 **Teacher Restrictions**: Flexible constraint management for teacher availability  
+- 📅 **Leave Management**: Automated leave tracking with smart replacement assignment
+- 📄 **PDF Export**: Professional report generation with customizable formatting
+- 🔢 **Scalable**: Handle unlimited classes, sections, and teachers (Premium)
+- 🎯 **Freemium Model**: Start free, upgrade when you grow
+- 💾 **Data Persistence**: All data automatically saved and extractable
+- 🔐 **License System**: 30-day trial → FREE tier → Premium upgrade
+
+### 💰 Pricing Plans
+
+| Feature | FREE | SCHOOL (₹499/month) | INSTITUTION (₹999/month) |
+|---------|------|---------------------|--------------------------|
+| Classes | 3 max | Unlimited | Unlimited |
+| Sections | 2 per class | Unlimited | Unlimited |
+| Teachers | 10 max | 50 max | Unlimited |
+| Auto-Assignment | ❌ | ✅ | ✅ |
+| Teacher Restrictions | ❌ | ✅ | ✅ |
+| Leave Management | ❌ | ✅ | ✅ |
+| PDF Export | ❌ | ✅ | ✅ |
+| Priority Support | ❌ | ✅ | ✅ |
+| Multi-School | ❌ | ❌ | ✅ |
+
+### 📥 Quick Download
+
+**🚀 [Download ClassFlow v2.0.exe](./clientdeploy/ClassFlow_v2.0.exe)** *(42MB - Windows)*
+
+**📦 Complete Package**: Copy the `clientdeploy` folder for full deployment
+
+### 🎯 Deployment Options
+
+#### **Option A: EXE Only (Recommended)**
+- Just share `ClassFlow_v2.0.exe` 
+- Schools get full functionality with clean start
+- All data auto-saved and persistent
+
+#### **Option B: Complete Package**  
+- Share `ClassFlow_v2.0.exe` + `timetable.db` + `config.json`
+- Schools get working examples and sample data
+- Professional deployment ready
+
+### 📊 Data Persistence Guarantee
+
+✅ **ALL DATA KEPT**: Every timetable, teacher, class automatically saved  
+✅ **FULLY EXTRACTABLE**: Schools can copy/backup all their data  
+✅ **ZERO LOSS**: Data persists between sessions and restarts  
+✅ **MIGRATION READY**: Easy backup and restore to new computers
+
+### 🔧 Technical Details
+
+- **Platform**: Windows 10/11
+- **Size**: 42MB executable (self-contained)
+- **Database**: SQLite (automatic creation)
+- **Config**: JSON (automatic generation)
+- **License**: File-based system (AppData storage)
+- **Dependencies**: None (PyInstaller compiled)
+
+### 📖 Documentation
+
+- 📋 [**Client Deployment Requirements**](./ClassFlow_Client_Deployment_Requirements.md)
+- 💾 [**Data Persistence Analysis**](./ClassFlow_Data_Persistence_Analysis.md)  
+- 🔐 [**License System Documentation**](./ClassFlow_v2.0_License_Executable_COMPLETE.md)
+- 📘 [**Complete User Guide**](./ClassFlow_v2.0_Complete_User_Guide.pdf)
+
+### 🌐 Live Demo & Features
+
+Visit our [**Official Website**](https://prashant-11.github.io/TimeTablePlanner/) for:
+- 🎥 Interactive demo videos
+- 📊 Feature comparisons  
+- 💳 Seamless upgrade process
+- 📞 Direct contact options
+
+### 📧 Contact & Support
+
+- **Website**: [prashant-11.github.io/TimeTablePlanner](https://prashant-11.github.io/TimeTablePlanner/)
+- **Email**: support@classflow.in  
+- **GitHub Issues**: [Report bugs & requests](https://github.com/Prashant-11/TimeTablePlanner/issues)
+- **Phone**: +91-XXXX-XXXXXX
+
+### 🏆 Why ClassFlow?
+
+1. **🆓 Start Free**: No upfront costs, use basic features forever
+2. **📈 Scale Up**: Upgrade only when your school grows  
+3. **🤖 Smart Features**: AI-powered auto-assignment and optimization
+4. **💪 Reliable**: All data saved, backed up, and extractable
+5. **🎯 School-Focused**: Built specifically for educational institutions
+
+---
+
+**🚀 Ready to revolutionize your school's timetable management?**  
+**[Download ClassFlow v2.0 Now!](https://prashant-11.github.io/TimeTablePlanner/)**
+
+---
+
+*Built with ❤️ for education • © 2025 ClassFlow Team*

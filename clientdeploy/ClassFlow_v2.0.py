@@ -353,10 +353,10 @@ class TimetableApp:
             self.show_upgrade_dialog("PDF Export")
     
     def show_upgrade_dialog(self, feature_name="Premium Features"):
-        """Show upgrade dialog for premium features"""
+        """Show upgrade dialog for premium features with improved UI and seamless upgrade"""
         upgrade_win = tk.Toplevel(self.root)
-        upgrade_win.title("Upgrade to Premium")
-        upgrade_win.geometry("600x500")
+        upgrade_win.title("Upgrade to Premium - ClassFlow")
+        upgrade_win.geometry("700x600")
         upgrade_win.resizable(False, False)
         upgrade_win.configure(bg="#f8f9fa")
         
@@ -366,125 +366,395 @@ class TimetableApp:
         
         # Center the window
         upgrade_win.update_idletasks()
-        x = (upgrade_win.winfo_screenwidth() // 2) - (600 // 2)
-        y = (upgrade_win.winfo_screenheight() // 2) - (500 // 2)
-        upgrade_win.geometry(f"600x500+{x}+{y}")
+        x = (upgrade_win.winfo_screenwidth() // 2) - (700 // 2)
+        y = (upgrade_win.winfo_screenheight() // 2) - (600 // 2)
+        upgrade_win.geometry(f"700x600+{x}+{y}")
         
-        # Main container
+        # Main container with scrollable frame
         main_container = tk.Frame(upgrade_win, bg="#f8f9fa")
-        main_container.pack(fill='both', expand=True, padx=30, pady=30)
+        main_container.pack(fill='both', expand=True, padx=20, pady=20)
         
         # Header
-        header_frame = tk.Frame(main_container, bg="#ff6b35", height=80)
-        header_frame.pack(fill='x', pady=(0, 20))
+        header_frame = tk.Frame(main_container, bg="#2d6cdf", height=90, relief="raised", borderwidth=2)
+        header_frame.pack(fill='x', pady=(0, 15))
         header_frame.pack_propagate(False)
         
         header_label = tk.Label(header_frame, 
             text="🚀 Upgrade to ClassFlow Premium", 
-            font=("Segoe UI", 16, "bold"),
+            font=("Segoe UI", 18, "bold"),
             foreground="white",
-            bg="#ff6b35")
-        header_label.pack(expand=True, pady=20)
+            bg="#2d6cdf")
+        header_label.pack(expand=True, pady=15)
         
-        # Feature info
-        feature_frame = tk.Frame(main_container, bg="#fff3cd", relief="solid", borderwidth=1)
-        feature_frame.pack(fill='x', pady=(0, 20))
+        # Feature info with better styling
+        feature_frame = tk.Frame(main_container, bg="#fff3cd", relief="solid", borderwidth=2)
+        feature_frame.pack(fill='x', pady=(0, 15))
         
         feature_label = tk.Label(feature_frame,
             text=f"🔒 {feature_name} requires a Premium License",
-            font=("Segoe UI", 12, "bold"),
+            font=("Segoe UI", 13, "bold"),
             bg="#fff3cd",
             fg="#856404",
-            padx=20,
-            pady=15)
+            padx=15,
+            pady=12,
+            wraplength=650,
+            justify='center')
         feature_label.pack()
         
-        # Benefits section
+        # Benefits section with better layout
         benefits_title = tk.Label(main_container, 
             text="✨ Premium Benefits:",
-            font=("Segoe UI", 14, "bold"),
+            font=("Segoe UI", 15, "bold"),
             bg="#f8f9fa",
             fg="#2d6cdf")
-        benefits_title.pack(anchor='w', pady=(0, 10))
+        benefits_title.pack(anchor='w', pady=(5, 8))
+        
+        # Create scrollable benefits frame
+        benefits_frame = tk.Frame(main_container, bg="#f8f9fa")
+        benefits_frame.pack(fill='x', pady=(0, 15))
         
         benefits = [
-            "🤖 Auto-Assign & Smart Match algorithms",
-            "👥 Advanced Teacher Restrictions management", 
-            "📅 Teacher Leave management system",
-            "📄 Professional PDF exports (no watermarks)",
-            "🔧 Unlimited classes, sections, and teachers",
-            "📊 Priority support and updates",
-            "☁️ Future: Cloud sync and mobile app access"
+            "🤖 Auto-Assign & Smart Match algorithms for optimal scheduling",
+            "👥 Advanced Teacher Restrictions management with flexible rules", 
+            "📅 Teacher Leave management system with automatic replacements",
+            "📄 Professional PDF exports without watermarks",
+            "� Unlimited classes, sections, teachers, and periods",
+            "🎯 Priority customer support and feature updates",
+            "☁️ Future: Cloud synchronization and mobile app access",
+            "📊 Advanced analytics and reporting features"
         ]
         
-        for benefit in benefits:
-            benefit_label = tk.Label(main_container,
+        for i, benefit in enumerate(benefits):
+            benefit_frame = tk.Frame(benefits_frame, bg="#f8f9fa")
+            benefit_frame.pack(fill='x', pady=2)
+            
+            benefit_label = tk.Label(benefit_frame,
                 text=benefit,
-                font=("Segoe UI", 10),
+                font=("Segoe UI", 11),
                 bg="#f8f9fa",
                 fg="#495057",
-                anchor='w')
-            benefit_label.pack(fill='x', pady=2)
+                anchor='w',
+                wraplength=650,
+                justify='left')
+            benefit_label.pack(side='left', fill='x', expand=True)
         
-        # Pricing
-        pricing_frame = tk.Frame(main_container, bg="#d4edda", relief="solid", borderwidth=1)
-        pricing_frame.pack(fill='x', pady=20)
+        # Pricing section with better styling
+        pricing_frame = tk.Frame(main_container, bg="#d4edda", relief="solid", borderwidth=2)
+        pricing_frame.pack(fill='x', pady=(10, 15))
         
-        pricing_label = tk.Label(pricing_frame,
-            text="💰 School Plan: ₹499/month | Institution Plan: ₹999/month",
-            font=("Segoe UI", 12, "bold"),
+        pricing_title = tk.Label(pricing_frame,
+            text="💰 Affordable Pricing Plans",
+            font=("Segoe UI", 13, "bold"),
+            bg="#d4edda",
+            fg="#155724")
+        pricing_title.pack(pady=(10, 5))
+        
+        pricing_details = tk.Label(pricing_frame,
+            text="🏫 School Plan: ₹499/month | 🏛️ Institution Plan: ₹999/month\n" +
+                 "💳 Easy payment options | 🔄 Cancel anytime | 💯 30-day money-back guarantee",
+            font=("Segoe UI", 10),
             bg="#d4edda",
             fg="#155724",
-            padx=20,
-            pady=15)
-        pricing_label.pack()
+            wraplength=650,
+            justify='center')
+        pricing_details.pack(pady=(0, 10))
         
-        # Buttons
+        # Action buttons with improved layout
         button_frame = tk.Frame(main_container, bg="#f8f9fa")
-        button_frame.pack(fill='x', pady=20)
+        button_frame.pack(fill='x', pady=(15, 10))
+        
+        # Primary upgrade button (orange/prominent)
+        upgrade_btn = tk.Button(button_frame, 
+                               text="🚀 UPGRADE TO PREMIUM NOW",
+                               command=lambda: self.initiate_upgrade_process(upgrade_win),
+                               bg="#ff6b35",
+                               fg="white",
+                               font=("Segoe UI", 14, "bold"),
+                               relief="flat",
+                               padx=30,
+                               pady=12,
+                               cursor="hand2",
+                               bd=0)
+        upgrade_btn.pack(pady=(0, 10))
+        
+        # Secondary action frame
+        secondary_frame = tk.Frame(button_frame, bg="#f8f9fa")
+        secondary_frame.pack(fill='x')
         
         # Activate License button
-        activate_btn = tk.Button(button_frame, 
+        activate_btn = tk.Button(secondary_frame, 
                                 text="🔑 I Have a License Key",
                                 command=lambda: self.show_activation_dialog(upgrade_win),
                                 bg="#28a745",
                                 fg="white",
-                                font=("Segoe UI", 12, "bold"),
+                                font=("Segoe UI", 11, "bold"),
                                 relief="flat",
-                                padx=20,
-                                pady=10,
+                                padx=15,
+                                pady=8,
                                 cursor="hand2")
         activate_btn.pack(side='left', padx=(0, 10))
         
         # Contact Sales button
-        contact_btn = tk.Button(button_frame, 
+        contact_btn = tk.Button(secondary_frame, 
                                text="📞 Contact Sales",
                                command=self.contact_sales,
                                bg="#007bff",
                                fg="white",
-                               font=("Segoe UI", 12, "bold"),
+                               font=("Segoe UI", 11, "bold"),
                                relief="flat",
-                               padx=20,
-                               pady=10,
+                               padx=15,
+                               pady=8,
                                cursor="hand2")
         contact_btn.pack(side='left', padx=(0, 10))
         
         # Close button
-        close_btn = tk.Button(button_frame, 
+        close_btn = tk.Button(secondary_frame, 
                              text="❌ Close",
                              command=upgrade_win.destroy,
                              bg="#6c757d",
                              fg="white",
-                             font=("Segoe UI", 12),
+                             font=("Segoe UI", 11),
                              relief="flat",
-                             padx=20,
-                             pady=10,
+                             padx=15,
+                             pady=8,
                              cursor="hand2")
         close_btn.pack(side='right')
         
-        # Focus
+        # Focus and bring to front
         upgrade_win.focus_set()
         upgrade_win.lift()
+        
+    def initiate_upgrade_process(self, parent_win):
+        """Initiate seamless upgrade process"""
+        # Close upgrade dialog
+        parent_win.destroy()
+        
+        # Show upgrade options
+        self.show_upgrade_options()
+    
+    def show_upgrade_options(self):
+        """Show upgrade options with seamless payment integration"""
+        options_win = tk.Toplevel(self.root)
+        options_win.title("Choose Your Plan - ClassFlow Premium")
+        options_win.geometry("600x400")
+        options_win.resizable(False, False)
+        options_win.configure(bg="#f8f9fa")
+        
+        # Make modal and center
+        options_win.transient(self.root)
+        options_win.grab_set()
+        
+        # Center window
+        options_win.update_idletasks()
+        x = (options_win.winfo_screenwidth() // 2) - (600 // 2)
+        y = (options_win.winfo_screenheight() // 2) - (400 // 2)
+        options_win.geometry(f"600x400+{x}+{y}")
+        
+        # Main container
+        main_container = tk.Frame(options_win, bg="#f8f9fa")
+        main_container.pack(fill='both', expand=True, padx=30, pady=30)
+        
+        # Header
+        header_label = tk.Label(main_container,
+            text="Choose Your Premium Plan",
+            font=("Segoe UI", 18, "bold"),
+            bg="#f8f9fa",
+            fg="#2d6cdf")
+        header_label.pack(pady=(0, 20))
+        
+        # Plan options
+        plans_frame = tk.Frame(main_container, bg="#f8f9fa")
+        plans_frame.pack(fill='x', expand=True)
+        
+        # School Plan
+        school_frame = tk.Frame(plans_frame, bg="#e3f2fd", relief="solid", borderwidth=2)
+        school_frame.pack(side='left', fill='both', expand=True, padx=(0, 10))
+        
+        tk.Label(school_frame, text="🏫 School Plan", font=("Segoe UI", 14, "bold"), 
+                bg="#e3f2fd", fg="#1976d2").pack(pady=10)
+        tk.Label(school_frame, text="₹499/month", font=("Segoe UI", 16, "bold"), 
+                bg="#e3f2fd", fg="#1976d2").pack()
+        tk.Label(school_frame, text="Perfect for single schools\n• Up to 50 teachers\n• Unlimited classes\n• All premium features", 
+                font=("Segoe UI", 10), bg="#e3f2fd", wraplength=200, justify='center').pack(pady=10)
+        
+        school_btn = tk.Button(school_frame, text="Select School Plan", 
+                              command=lambda: self.process_payment("school", options_win),
+                              bg="#1976d2", fg="white", font=("Segoe UI", 11, "bold"),
+                              padx=20, pady=8, cursor="hand2")
+        school_btn.pack(pady=10)
+        
+        # Institution Plan
+        institution_frame = tk.Frame(plans_frame, bg="#e8f5e8", relief="solid", borderwidth=2)
+        institution_frame.pack(side='right', fill='both', expand=True, padx=(10, 0))
+        
+        tk.Label(institution_frame, text="🏛️ Institution Plan", font=("Segoe UI", 14, "bold"), 
+                bg="#e8f5e8", fg="#2e7d32").pack(pady=10)
+        tk.Label(institution_frame, text="₹999/month", font=("Segoe UI", 16, "bold"), 
+                bg="#e8f5e8", fg="#2e7d32").pack()
+        tk.Label(institution_frame, text="For multiple schools\n• Unlimited teachers\n• Multi-school management\n• Priority support", 
+                font=("Segoe UI", 10), bg="#e8f5e8", wraplength=200, justify='center').pack(pady=10)
+        
+        institution_btn = tk.Button(institution_frame, text="Select Institution Plan", 
+                                   command=lambda: self.process_payment("institution", options_win),
+                                   bg="#2e7d32", fg="white", font=("Segoe UI", 11, "bold"),
+                                   padx=20, pady=8, cursor="hand2")
+        institution_btn.pack(pady=10)
+        
+        # Close button
+        close_btn = tk.Button(main_container, text="❌ Cancel", command=options_win.destroy,
+                             bg="#6c757d", fg="white", font=("Segoe UI", 11),
+                             padx=20, pady=8, cursor="hand2")
+        close_btn.pack(pady=(20, 0))
+    
+    def process_payment(self, plan_type, parent_win):
+        """Process payment and upgrade seamlessly"""
+        # Close options window
+        parent_win.destroy()
+        
+        # Show payment processing
+        payment_win = tk.Toplevel(self.root)
+        payment_win.title("Payment - ClassFlow Premium")
+        payment_win.geometry("500x300")
+        payment_win.resizable(False, False)
+        payment_win.configure(bg="#f8f9fa")
+        
+        # Make modal and center
+        payment_win.transient(self.root)
+        payment_win.grab_set()
+        
+        # Center window
+        payment_win.update_idletasks()
+        x = (payment_win.winfo_screenwidth() // 2) - (500 // 2)
+        y = (payment_win.winfo_screenheight() // 2) - (300 // 2)
+        payment_win.geometry(f"500x300+{x}+{y}")
+        
+        main_container = tk.Frame(payment_win, bg="#f8f9fa")
+        main_container.pack(fill='both', expand=True, padx=40, pady=40)
+        
+        # Payment info
+        plan_name = "School Plan (₹499/month)" if plan_type == "school" else "Institution Plan (₹999/month)"
+        
+        tk.Label(main_container, text="💳 Payment Information", 
+                font=("Segoe UI", 16, "bold"), bg="#f8f9fa", fg="#2d6cdf").pack(pady=(0, 15))
+        
+        tk.Label(main_container, text=f"Selected: {plan_name}", 
+                font=("Segoe UI", 12, "bold"), bg="#f8f9fa").pack(pady=5)
+        
+        # Payment options
+        tk.Label(main_container, text="Choose Payment Method:", 
+                font=("Segoe UI", 11), bg="#f8f9fa").pack(pady=(10, 5))
+        
+        payment_frame = tk.Frame(main_container, bg="#f8f9fa")
+        payment_frame.pack(pady=10)
+        
+        # Payment buttons
+        razorpay_btn = tk.Button(payment_frame, text="💳 Pay with Razorpay", 
+                                command=lambda: self.open_payment_link(plan_type, "razorpay", payment_win),
+                                bg="#528ff0", fg="white", font=("Segoe UI", 11, "bold"),
+                                padx=15, pady=8, cursor="hand2")
+        razorpay_btn.pack(pady=5)
+        
+        paytm_btn = tk.Button(payment_frame, text="📱 Pay with PayTM", 
+                             command=lambda: self.open_payment_link(plan_type, "paytm", payment_win),
+                             bg="#00baf2", fg="white", font=("Segoe UI", 11, "bold"),
+                             padx=15, pady=8, cursor="hand2")
+        paytm_btn.pack(pady=5)
+        
+        # Manual activation option
+        tk.Label(main_container, text="Or contact sales for bank transfer/other options", 
+                font=("Segoe UI", 9), bg="#f8f9fa", fg="#6c757d").pack(pady=(15, 5))
+        
+        contact_btn = tk.Button(main_container, text="📞 Contact Sales", 
+                               command=self.contact_sales,
+                               bg="#6c757d", fg="white", font=("Segoe UI", 10),
+                               padx=15, pady=6, cursor="hand2")
+        contact_btn.pack(pady=5)
+        
+        # Close button
+        close_btn = tk.Button(main_container, text="❌ Cancel", command=payment_win.destroy,
+                             bg="#dc3545", fg="white", font=("Segoe UI", 10),
+                             padx=15, pady=6, cursor="hand2")
+        close_btn.pack(pady=(10, 0))
+    
+    def open_payment_link(self, plan_type, payment_method, parent_win):
+        """Open payment link and handle post-payment"""
+        import webbrowser
+        
+        # Close payment window
+        parent_win.destroy()
+        
+        # Payment URLs (replace with actual payment gateway URLs)
+        payment_urls = {
+            "school": {
+                "razorpay": "https://razorpay.me/@classflow499",
+                "paytm": "https://paytm.me/classflow-school"
+            },
+            "institution": {
+                "razorpay": "https://razorpay.me/@classflow999", 
+                "paytm": "https://paytm.me/classflow-institution"
+            }
+        }
+        
+        # Open payment URL
+        url = payment_urls.get(plan_type, {}).get(payment_method, "")
+        if url:
+            webbrowser.open(url)
+        
+        # Show post-payment instructions
+        self.show_post_payment_instructions(plan_type)
+    
+    def show_post_payment_instructions(self, plan_type):
+        """Show instructions after payment"""
+        instructions_win = tk.Toplevel(self.root)
+        instructions_win.title("Payment Submitted - ClassFlow Premium")
+        instructions_win.geometry("550x350")
+        instructions_win.resizable(False, False)
+        instructions_win.configure(bg="#f8f9fa")
+        
+        # Make modal and center
+        instructions_win.transient(self.root)
+        instructions_win.grab_set()
+        
+        # Center window
+        instructions_win.update_idletasks()
+        x = (instructions_win.winfo_screenwidth() // 2) - (550 // 2)
+        y = (instructions_win.winfo_screenheight() // 2) - (350 // 2)
+        instructions_win.geometry(f"550x350+{x}+{y}")
+        
+        main_container = tk.Frame(instructions_win, bg="#f8f9fa")
+        main_container.pack(fill='both', expand=True, padx=30, pady=30)
+        
+        # Success header
+        tk.Label(main_container, text="✅ Payment Submitted Successfully!", 
+                font=("Segoe UI", 16, "bold"), bg="#f8f9fa", fg="#28a745").pack(pady=(0, 15))
+        
+        # Instructions
+        instructions = [
+            "🔄 Your payment is being processed",
+            "📧 You will receive a license key via email within 24 hours",
+            "🔑 Use the license key to activate Premium features",
+            "📞 Contact support if you don't receive the key",
+            "💡 Save this information for your records"
+        ]
+        
+        for instruction in instructions:
+            tk.Label(main_container, text=instruction, font=("Segoe UI", 11), 
+                    bg="#f8f9fa", anchor='w', wraplength=490, justify='left').pack(fill='x', pady=3)
+        
+        # Contact info
+        contact_frame = tk.Frame(main_container, bg="#e3f2fd", relief="solid", borderwidth=1)
+        contact_frame.pack(fill='x', pady=(15, 10))
+        
+        tk.Label(contact_frame, text="📞 Support Contact", font=("Segoe UI", 12, "bold"), 
+                bg="#e3f2fd", fg="#1976d2").pack(pady=(8, 5))
+        tk.Label(contact_frame, text="Email: support@classflow.in\nPhone: +91-XXXX-XXXXXX", 
+                font=("Segoe UI", 10), bg="#e3f2fd", justify='center').pack(pady=(0, 8))
+        
+        # Close button
+        close_btn = tk.Button(main_container, text="✅ Got It", command=instructions_win.destroy,
+                             bg="#28a745", fg="white", font=("Segoe UI", 12, "bold"),
+                             padx=20, pady=8, cursor="hand2")
+        close_btn.pack(pady=(15, 0))
     
     def show_activation_dialog(self, parent_win=None):
         """Show license activation dialog"""

@@ -1,0 +1,15 @@
+ClassFlow v2.0 - Freemium Implementation 
+Release Date: 11-08-2025 10:22:26.55 
+Package Contents: 
+- ClassFlow_v2.0.py (Main application with freemium model) 
+- config.json (School configuration) 
+- timetable.db (Database with current data) 
+- README.txt (Complete deployment guide) 
+- license_demo.py (License testing tool) 
+ 
+Business Model: 
+- 30-day trial (all features) 
+- FREE: 3 classes, 2 sections, 10 teachers (limited features) 
+- PREMIUM: Unlimited scale, all features 
+ 
+Contact: prashant.compsc@gmail.com 

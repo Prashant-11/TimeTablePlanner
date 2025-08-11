@@ -1,0 +1,45 @@
+﻿ClassFlow v2.0 - Freemium Implementation
+========================================
+Release Date: 2025-08-11 10:22:00
+Version: 2.0 (Production Ready)
+
+Package Contents:
+â”œâ”€â”€ ClassFlow_v2.0.py (Main application with freemium model)
+â”œâ”€â”€ ClassFlow_Latest.exe (Compiled executable)
+â”œâ”€â”€ config.json (School configuration)
+â”œâ”€â”€ timetable.db (Database with current data)
+â”œâ”€â”€ README.txt (Complete deployment guide)
+â”œâ”€â”€ license_demo.py (License testing tool)
+â”œâ”€â”€ live_license_demo.py (Live license demo)
+â””â”€â”€ ClassFlow_v2.0_Guide.md (Implementation documentation)
+
+Business Model:
+===============
+ðŸ†“ FREE Plan: 3 classes, 2 sections, 10 teachers (limited features)
+ðŸ« School Plan: â‚¹499/month (unlimited scale, all features)
+ðŸ¢ Institution Plan: â‚¹999/month (multi-location, priority support)
+
+Features:
+=========
+âœ… 30-day full-feature trial
+âœ… Automatic license management
+âœ… Feature gating for premium functions
+âœ… Professional upgrade dialogs
+âœ… Dynamic UI based on license status
+âœ… Export watermarking for free users
+âœ… Scale limitations enforcement
+
+Installation:
+=============
+1. Run ClassFlow_Latest.exe OR python ClassFlow_v2.0.py
+2. Trial automatically starts on first launch
+3. Configure school data in config.json
+4. Purchase premium license for full features
+
+Contact Information:
+===================
+Sales: prashant.compsc@gmail.com
+Support: Available after purchase
+Repository: https://github.com/Prashant-11/TimeTablePlanner
+
+Ready for production deployment! ðŸš€
