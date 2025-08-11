@@ -8,8 +8,14 @@ import calendar
 from datetime import datetime, timedelta
 import socket
 import urllib.request
+import urllib.error
 import base64
 import hashlib
+import threading
+import zipfile
+import shutil
+import subprocess
+import sys
 
 # Lazy imports - load only when needed
 def lazy_import_pandas():
@@ -193,6 +199,48 @@ class LicenseManager:
             config['teachers'] = config['teachers'][:max_teachers]
         
         return violations, config
+    
+    def validate_config(self, config):
+        """Validate and fix configuration against license limits"""
+        violations, validated_config = self.validate_config_limits(config)
+        
+        if violations:
+            print(f"License limit violations corrected: {violations}")
+            
+        return validated_config
+    
+    def activate_license(self, license_key):
+        """Activate premium license with given key"""
+        if not license_key or len(license_key) < 10:
+            return False
+            
+        # Basic license key validation
+        if license_key.startswith("CFLOW-"):
+            # Activate premium license
+            self.license_data.update({
+                "license_type": "PREMIUM",
+                "license_key": license_key,
+                "features": {
+                    "max_classes": 999,
+                    "max_sections": 999,
+                    "max_teachers": 999,
+                    "max_periods": 12,
+                    "auto_assign": True,
+                    "smart_match": True,
+                    "teacher_restrictions": True,
+                    "teacher_leave": True,
+                    "pdf_export": True,
+                    "watermark": False
+                }
+            })
+            self.save_license(self.license_data)
+            return True
+        
+        return False
+    
+    def convert_to_free(self):
+        """Convert trial to free version"""
+        self.upgrade_to_free()
 
 class TimetableApp:
     def __init__(self, root):
@@ -430,6 +478,11 @@ class TimetableApp:
         
         # Add additional scroll event bindings
         self._bind_scroll_events()
+        
+        # Add status bar at the bottom
+        self.status_bar = tk.Label(self.root, text="Ready", relief=tk.SUNKEN, anchor="w", 
+                                 bg="#f0f0f0", font=("Segoe UI", 9))
+        self.status_bar.pack(fill="x", side="bottom")
         
         # Initial grid draw
         self.draw_grid()
@@ -1175,6 +1228,101 @@ class TimetableApp:
         # Focus on window
         win.focus_set()
         win.grab_set()  # Make window modal
+    
+    def save_timetable_entry(self, class_name, section, period, day, teacher, subject):
+        """Save a timetable entry to the database"""
+        try:
+            if not hasattr(self, 'cursor') or not self.cursor:
+                self.setup_db()
+            
+            # Get current week and year
+            week = self.selected_week.get()
+            year = self.selected_year.get()
+            
+            # Check if entry already exists
+            self.cursor.execute("""
+                SELECT id FROM timetable_entries 
+                WHERE class_name=? AND section=? AND period=? AND day=? AND week=? AND year=?
+            """, (class_name, section, period, day, week, year))
+            
+            if self.cursor.fetchone():
+                # Update existing entry
+                self.cursor.execute("""
+                    UPDATE timetable_entries 
+                    SET teacher=?, subject=? 
+                    WHERE class_name=? AND section=? AND period=? AND day=? AND week=? AND year=?
+                """, (teacher, subject, class_name, section, period, day, week, year))
+            else:
+                # Insert new entry
+                self.cursor.execute("""
+                    INSERT INTO timetable_entries 
+                    (class_name, section, period, day, week, year, teacher, subject)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (class_name, section, period, day, week, year, teacher, subject))
+            
+            self.conn.commit()
+            return True
+        except Exception as e:
+            print(f"Error saving timetable entry: {e}")
+            return False
+    
+    def auto_assign_timetable(self):
+        """Auto-assign teachers to timetable slots"""
+        try:
+            if not self.license_manager.validate_feature("auto_assign"):
+                messagebox.showwarning("Feature Restricted", 
+                    "Auto-assign is not available in your current license. Please upgrade to access this feature.")
+                return
+            
+            # Update status
+            if hasattr(self, 'status_bar'):
+                self.status_bar.config(text="Auto-assigning timetable...")
+            
+            # Simple auto-assignment logic
+            teachers = self.config.get('teachers', [])
+            subjects = self.config.get('subjects', [])
+            
+            if not teachers or not subjects:
+                messagebox.showwarning("Configuration Missing", 
+                    "Please configure teachers and subjects before auto-assignment.")
+                return
+            
+            assigned_count = 0
+            
+            # Get all empty slots
+            for class_name in self.config.get('classes', []):
+                for section in self.config.get('sections', []):
+                    for period in range(1, 9):  # 8 periods
+                        for day in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']:
+                            # Check if slot is empty
+                            entry_key = (class_name, section, period, day)
+                            if entry_key not in self.entries or not self.entries[entry_key].get():
+                                # Assign random teacher and subject
+                                import random
+                                teacher = random.choice(teachers)
+                                subject = random.choice(subjects)
+                                
+                                # Save the assignment
+                                if self.save_timetable_entry(class_name, section, period, day, teacher, subject):
+                                    if entry_key in self.entries:
+                                        self.entries[entry_key].set(f"{teacher} - {subject}")
+                                    assigned_count += 1
+            
+            # Update status
+            if hasattr(self, 'status_bar'):
+                self.status_bar.config(text=f"Auto-assignment complete: {assigned_count} slots assigned")
+            
+            messagebox.showinfo("Auto-Assignment Complete", 
+                f"Successfully assigned {assigned_count} timetable slots.")
+            
+            return assigned_count
+            
+        except Exception as e:
+            print(f"Error in auto-assignment: {e}")
+            if hasattr(self, 'status_bar'):
+                self.status_bar.config(text="Auto-assignment failed")
+            messagebox.showerror("Error", f"Auto-assignment failed: {str(e)}")
+            return 0
 
 if __name__ == "__main__":
     print("Launching Timetable Planner...")

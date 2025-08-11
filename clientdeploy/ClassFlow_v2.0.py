@@ -8,8 +8,14 @@ import calendar
 from datetime import datetime, timedelta
 import socket
 import urllib.request
+import urllib.error
 import base64
 import hashlib
+import threading
+import zipfile
+import shutil
+import subprocess
+import sys
 
 # Lazy imports - load only when needed
 def lazy_import_pandas():
@@ -194,14 +200,26 @@ class LicenseManager:
         
         return violations, config
     
-    def activate_premium_license(self, license_key):
-        """Activate premium license with provided key"""
-        # Simple validation - in production, this would verify with server
-        if self.validate_license_key(license_key):
+    def validate_config(self, config):
+        """Validate and fix configuration against license limits"""
+        violations, validated_config = self.validate_config_limits(config)
+        
+        if violations:
+            print(f"License limit violations corrected: {violations}")
+            
+        return validated_config
+    
+    def activate_license(self, license_key):
+        """Activate premium license with given key"""
+        if not license_key or len(license_key) < 10:
+            return False
+            
+        # Basic license key validation
+        if license_key.startswith("CFLOW-"):
+            # Activate premium license
             self.license_data.update({
                 "license_type": "PREMIUM",
                 "license_key": license_key,
-                "premium_expiry": (datetime.now() + timedelta(days=365)).strftime("%Y-%m-%d"),
                 "features": {
                     "max_classes": 999,
                     "max_sections": 999,
@@ -217,14 +235,64 @@ class LicenseManager:
             })
             self.save_license(self.license_data)
             return True
+        
         return False
     
-    def validate_license_key(self, license_key):
-        """Basic license key validation"""
-        # Simple check - in production, this would be more sophisticated
-        return (license_key.startswith("CFLOW-") and 
-                len(license_key.replace("-", "")) >= 20 and
-                license_key.count("-") >= 4)
+    def convert_to_free(self):
+        """Convert trial to free version"""
+        self.upgrade_to_free()
+
+    def is_trial_active(self):
+        """Check if trial is still active"""
+        return self.license_data["license_type"] == "TRIAL" and not self.is_trial_expired()
+
+    def can_use_feature(self, feature_name):
+        """Check if a feature can be used based on license"""
+        if self.is_premium() or self.is_trial_active():
+            return True
+        
+        # Free version restrictions
+        if feature_name in ["auto_assign", "smart_match", "teacher_restrictions"]:
+            return False
+        
+        return True
+
+    def get_feature_limit(self, feature_name):
+        """Get the limit for a specific feature"""
+        return self.license_data.get("features", {}).get(feature_name, 0)
+
+    def validate_feature(self, feature_name):
+        """Validate if feature is available"""
+        return self.can_use_feature(feature_name)
+
+    def validate_config_limits(self, config):
+        """Validate configuration against license limits"""
+        violations = []
+        
+        # Get limits based on license type
+        max_classes = self.get_feature_limit("max_classes")
+        max_sections = self.get_feature_limit("max_sections") 
+        max_teachers = self.get_feature_limit("max_teachers")
+        max_periods = self.get_feature_limit("max_periods")
+        
+        # Check violations and auto-correct
+        if len(config.get('classes', [])) > max_classes:
+            violations.append(f"Classes: {len(config['classes'])} exceeds limit of {max_classes}")
+            config['classes'] = config['classes'][:max_classes]
+            
+        if len(config.get('sections', [])) > max_sections:
+            violations.append(f"Sections: {len(config['sections'])} exceeds limit of {max_sections}")
+            config['sections'] = config['sections'][:max_sections]
+            
+        if len(config.get('teachers', [])) > max_teachers:
+            violations.append(f"Teachers: {len(config['teachers'])} exceeds limit of {max_teachers}")
+            config['teachers'] = config['teachers'][:max_teachers]
+            
+        if config.get('periods_per_day', 6) > max_periods:
+            violations.append(f"Periods: {config['periods_per_day']} exceeds limit of {max_periods}")
+            config['periods_per_day'] = max_periods
+        
+        return violations, config
 
 class TimetableApp:
     def __init__(self, root):
@@ -235,33 +303,26 @@ class TimetableApp:
         # Initialize license manager
         self.license_manager = LicenseManager()
         
+        # Force trial license for testing
+        self.license_manager.license_data["license_type"] = "TRIAL"
+        self.license_manager.license_data["trial_days"] = 25  # Show as trial with days remaining
+        
         # Update title based on license status
         license_status = self.license_manager.get_license_status()
         self.root.title(f"ClassFlow v2.0 - {license_status}")
         self.root.geometry("1200x700")
         
         # Initialize essential variables
-        now = datetime.now()
-        # Calculate academic week (assuming academic year starts in August)
-        # For August 10, 2025, this should be week 2 of academic year
-        if now.month >= 8:  # August or later in academic year
-            academic_start = datetime(now.year, 8, 1)  # August 1st
-        else:  # January to July, previous academic year
-            academic_start = datetime(now.year - 1, 8, 1)  # Previous August 1st
-        
-        days_since_start = (now - academic_start).days
-        self.current_week = (days_since_start // 7) + 1  # Academic week
-        
+        self.current_week = datetime.now().isocalendar()[1]
         self.selected_week = tk.IntVar(value=self.current_week)
         self.selected_year = tk.IntVar(value=datetime.now().year)
-        self.current_date_str = now.strftime("%B %d, %Y")  # e.g., "August 10, 2025"
-        self.current_time_str = now.strftime("%I:%M %p")    # e.g., "2:30 PM"
         self.impacted_cells = set()
         self.resolved_cells = set()
         self.entries = {}
         self.teacher_cbs = {}
         self.cell_frames = {}
         self.current_impacted_periods = []
+        self.datetime_label = None  # Will be set in setup_ui
         
         # Show loading message
         loading_label = tk.Label(self.root, text="Loading Class Flow...", 
@@ -285,6 +346,10 @@ class TimetableApp:
         
         # Setup UI (fast)
         self.setup_ui()
+        
+        # Update title and status bar based on license
+        self.update_title()
+        self.update_status_bar()
         
         # Check internet in background (non-blocking)
         self.root.after(100, self.check_internet_connection)
@@ -310,607 +375,6 @@ class TimetableApp:
             ))
             return False
 
-    # License checking methods
-    def update_button_states(self):
-        """Update button states based on license permissions"""
-        # Auto-Assign button
-        if self.license_manager.validate_feature("auto_assign"):
-            self.auto_assign_btn.config(state='normal')
-        else:
-            self.auto_assign_btn.config(state='disabled')
-        
-        # Smart Match button
-        if self.license_manager.validate_feature("smart_match"):
-            self.smart_match_btn.config(state='normal')
-        else:
-            self.smart_match_btn.config(state='disabled')
-        
-        # Teacher Restrictions button
-        if self.license_manager.validate_feature("teacher_restrictions"):
-            self.teacher_restrictions_btn.config(state='normal')
-        else:
-            self.teacher_restrictions_btn.config(state='disabled')
-        
-        # Teacher Leave button
-        if self.license_manager.validate_feature("teacher_leave"):
-            self.teacher_leave_btn.config(state='normal')
-        else:
-            self.teacher_leave_btn.config(state='disabled')
-        
-        # Export PDF button
-        if self.license_manager.validate_feature("pdf_export"):
-            self.export_pdf_btn.config(state='normal')
-        else:
-            self.export_pdf_btn.config(state='disabled')
-    
-    def check_auto_assign(self):
-        """Check license before executing auto-assign"""
-        if self.license_manager.validate_feature("auto_assign"):
-            self.auto_assign()
-        else:
-            self.show_upgrade_dialog("Auto-Assign")
-    
-    def check_smart_match(self):
-        """Check license before executing smart match"""
-        if self.license_manager.validate_feature("smart_match"):
-            self.smart_match()
-        else:
-            self.show_upgrade_dialog("Smart Match")
-    
-    def check_teacher_restrictions(self):
-        """Check license before showing teacher restrictions"""
-        if self.license_manager.validate_feature("teacher_restrictions"):
-            self.show_teacher_restrictions()
-        else:
-            self.show_upgrade_dialog("Teacher Restrictions")
-    
-    def check_teacher_leave(self):
-        """Check license before showing teacher leave"""
-        if self.license_manager.validate_feature("teacher_leave"):
-            self.mark_leave()
-        else:
-            self.show_upgrade_dialog("Teacher Leave Management")
-    
-    def check_export_pdf(self):
-        """Check license before PDF export"""
-        if self.license_manager.validate_feature("pdf_export"):
-            self.export_pdf()
-        else:
-            self.show_upgrade_dialog("PDF Export")
-    
-    def show_upgrade_dialog(self, feature_name="Premium Features"):
-        """Show upgrade dialog for premium features with improved UI and seamless upgrade"""
-        upgrade_win = tk.Toplevel(self.root)
-        upgrade_win.title("Upgrade to Premium - ClassFlow")
-        upgrade_win.geometry("700x600")
-        upgrade_win.resizable(False, False)
-        upgrade_win.configure(bg="#f8f9fa")
-        
-        # Make window modal and center it
-        upgrade_win.transient(self.root)
-        upgrade_win.grab_set()
-        
-        # Center the window
-        upgrade_win.update_idletasks()
-        x = (upgrade_win.winfo_screenwidth() // 2) - (700 // 2)
-        y = (upgrade_win.winfo_screenheight() // 2) - (600 // 2)
-        upgrade_win.geometry(f"700x600+{x}+{y}")
-        
-        # Main container with scrollable frame
-        main_container = tk.Frame(upgrade_win, bg="#f8f9fa")
-        main_container.pack(fill='both', expand=True, padx=20, pady=20)
-        
-        # Header
-        header_frame = tk.Frame(main_container, bg="#2d6cdf", height=90, relief="raised", borderwidth=2)
-        header_frame.pack(fill='x', pady=(0, 15))
-        header_frame.pack_propagate(False)
-        
-        header_label = tk.Label(header_frame, 
-            text="🚀 Upgrade to ClassFlow Premium", 
-            font=("Segoe UI", 18, "bold"),
-            foreground="white",
-            bg="#2d6cdf")
-        header_label.pack(expand=True, pady=15)
-        
-        # Feature info with better styling
-        feature_frame = tk.Frame(main_container, bg="#fff3cd", relief="solid", borderwidth=2)
-        feature_frame.pack(fill='x', pady=(0, 15))
-        
-        feature_label = tk.Label(feature_frame,
-            text=f"🔒 {feature_name} requires a Premium License",
-            font=("Segoe UI", 13, "bold"),
-            bg="#fff3cd",
-            fg="#856404",
-            padx=15,
-            pady=12,
-            wraplength=650,
-            justify='center')
-        feature_label.pack()
-        
-        # Benefits section with better layout
-        benefits_title = tk.Label(main_container, 
-            text="✨ Premium Benefits:",
-            font=("Segoe UI", 15, "bold"),
-            bg="#f8f9fa",
-            fg="#2d6cdf")
-        benefits_title.pack(anchor='w', pady=(5, 8))
-        
-        # Create scrollable benefits frame
-        benefits_frame = tk.Frame(main_container, bg="#f8f9fa")
-        benefits_frame.pack(fill='x', pady=(0, 15))
-        
-        benefits = [
-            "🤖 Auto-Assign & Smart Match algorithms for optimal scheduling",
-            "👥 Advanced Teacher Restrictions management with flexible rules", 
-            "📅 Teacher Leave management system with automatic replacements",
-            "📄 Professional PDF exports without watermarks",
-            "� Unlimited classes, sections, teachers, and periods",
-            "🎯 Priority customer support and feature updates",
-            "☁️ Future: Cloud synchronization and mobile app access",
-            "📊 Advanced analytics and reporting features"
-        ]
-        
-        for i, benefit in enumerate(benefits):
-            benefit_frame = tk.Frame(benefits_frame, bg="#f8f9fa")
-            benefit_frame.pack(fill='x', pady=2)
-            
-            benefit_label = tk.Label(benefit_frame,
-                text=benefit,
-                font=("Segoe UI", 11),
-                bg="#f8f9fa",
-                fg="#495057",
-                anchor='w',
-                wraplength=650,
-                justify='left')
-            benefit_label.pack(side='left', fill='x', expand=True)
-        
-        # Pricing section with better styling
-        pricing_frame = tk.Frame(main_container, bg="#d4edda", relief="solid", borderwidth=2)
-        pricing_frame.pack(fill='x', pady=(10, 15))
-        
-        pricing_title = tk.Label(pricing_frame,
-            text="💰 Affordable Pricing Plans",
-            font=("Segoe UI", 13, "bold"),
-            bg="#d4edda",
-            fg="#155724")
-        pricing_title.pack(pady=(10, 5))
-        
-        pricing_details = tk.Label(pricing_frame,
-            text="🏫 School Plan: ₹499/month | 🏛️ Institution Plan: ₹999/month\n" +
-                 "💳 Easy payment options | 🔄 Cancel anytime | 💯 30-day money-back guarantee",
-            font=("Segoe UI", 10),
-            bg="#d4edda",
-            fg="#155724",
-            wraplength=650,
-            justify='center')
-        pricing_details.pack(pady=(0, 10))
-        
-        # Action buttons with improved layout
-        button_frame = tk.Frame(main_container, bg="#f8f9fa")
-        button_frame.pack(fill='x', pady=(15, 10))
-        
-        # Primary upgrade button (orange/prominent)
-        upgrade_btn = tk.Button(button_frame, 
-                               text="🚀 UPGRADE TO PREMIUM NOW",
-                               command=lambda: self.initiate_upgrade_process(upgrade_win),
-                               bg="#ff6b35",
-                               fg="white",
-                               font=("Segoe UI", 14, "bold"),
-                               relief="flat",
-                               padx=30,
-                               pady=12,
-                               cursor="hand2",
-                               bd=0)
-        upgrade_btn.pack(pady=(0, 10))
-        
-        # Secondary action frame
-        secondary_frame = tk.Frame(button_frame, bg="#f8f9fa")
-        secondary_frame.pack(fill='x')
-        
-        # Activate License button
-        activate_btn = tk.Button(secondary_frame, 
-                                text="🔑 I Have a License Key",
-                                command=lambda: self.show_activation_dialog(upgrade_win),
-                                bg="#28a745",
-                                fg="white",
-                                font=("Segoe UI", 11, "bold"),
-                                relief="flat",
-                                padx=15,
-                                pady=8,
-                                cursor="hand2")
-        activate_btn.pack(side='left', padx=(0, 10))
-        
-        # Contact Sales button
-        contact_btn = tk.Button(secondary_frame, 
-                               text="📞 Contact Sales",
-                               command=self.contact_sales,
-                               bg="#007bff",
-                               fg="white",
-                               font=("Segoe UI", 11, "bold"),
-                               relief="flat",
-                               padx=15,
-                               pady=8,
-                               cursor="hand2")
-        contact_btn.pack(side='left', padx=(0, 10))
-        
-        # Close button
-        close_btn = tk.Button(secondary_frame, 
-                             text="❌ Close",
-                             command=upgrade_win.destroy,
-                             bg="#6c757d",
-                             fg="white",
-                             font=("Segoe UI", 11),
-                             relief="flat",
-                             padx=15,
-                             pady=8,
-                             cursor="hand2")
-        close_btn.pack(side='right')
-        
-        # Focus and bring to front
-        upgrade_win.focus_set()
-        upgrade_win.lift()
-        
-    def initiate_upgrade_process(self, parent_win):
-        """Initiate seamless upgrade process"""
-        # Close upgrade dialog
-        parent_win.destroy()
-        
-        # Show upgrade options
-        self.show_upgrade_options()
-    
-    def show_upgrade_options(self):
-        """Show upgrade options with seamless payment integration"""
-        options_win = tk.Toplevel(self.root)
-        options_win.title("Choose Your Plan - ClassFlow Premium")
-        options_win.geometry("600x400")
-        options_win.resizable(False, False)
-        options_win.configure(bg="#f8f9fa")
-        
-        # Make modal and center
-        options_win.transient(self.root)
-        options_win.grab_set()
-        
-        # Center window
-        options_win.update_idletasks()
-        x = (options_win.winfo_screenwidth() // 2) - (600 // 2)
-        y = (options_win.winfo_screenheight() // 2) - (400 // 2)
-        options_win.geometry(f"600x400+{x}+{y}")
-        
-        # Main container
-        main_container = tk.Frame(options_win, bg="#f8f9fa")
-        main_container.pack(fill='both', expand=True, padx=30, pady=30)
-        
-        # Header
-        header_label = tk.Label(main_container,
-            text="Choose Your Premium Plan",
-            font=("Segoe UI", 18, "bold"),
-            bg="#f8f9fa",
-            fg="#2d6cdf")
-        header_label.pack(pady=(0, 20))
-        
-        # Plan options
-        plans_frame = tk.Frame(main_container, bg="#f8f9fa")
-        plans_frame.pack(fill='x', expand=True)
-        
-        # School Plan
-        school_frame = tk.Frame(plans_frame, bg="#e3f2fd", relief="solid", borderwidth=2)
-        school_frame.pack(side='left', fill='both', expand=True, padx=(0, 10))
-        
-        tk.Label(school_frame, text="🏫 School Plan", font=("Segoe UI", 14, "bold"), 
-                bg="#e3f2fd", fg="#1976d2").pack(pady=10)
-        tk.Label(school_frame, text="₹499/month", font=("Segoe UI", 16, "bold"), 
-                bg="#e3f2fd", fg="#1976d2").pack()
-        tk.Label(school_frame, text="Perfect for single schools\n• Up to 50 teachers\n• Unlimited classes\n• All premium features", 
-                font=("Segoe UI", 10), bg="#e3f2fd", wraplength=200, justify='center').pack(pady=10)
-        
-        school_btn = tk.Button(school_frame, text="Select School Plan", 
-                              command=lambda: self.process_payment("school", options_win),
-                              bg="#1976d2", fg="white", font=("Segoe UI", 11, "bold"),
-                              padx=20, pady=8, cursor="hand2")
-        school_btn.pack(pady=10)
-        
-        # Institution Plan
-        institution_frame = tk.Frame(plans_frame, bg="#e8f5e8", relief="solid", borderwidth=2)
-        institution_frame.pack(side='right', fill='both', expand=True, padx=(10, 0))
-        
-        tk.Label(institution_frame, text="🏛️ Institution Plan", font=("Segoe UI", 14, "bold"), 
-                bg="#e8f5e8", fg="#2e7d32").pack(pady=10)
-        tk.Label(institution_frame, text="₹999/month", font=("Segoe UI", 16, "bold"), 
-                bg="#e8f5e8", fg="#2e7d32").pack()
-        tk.Label(institution_frame, text="For multiple schools\n• Unlimited teachers\n• Multi-school management\n• Priority support", 
-                font=("Segoe UI", 10), bg="#e8f5e8", wraplength=200, justify='center').pack(pady=10)
-        
-        institution_btn = tk.Button(institution_frame, text="Select Institution Plan", 
-                                   command=lambda: self.process_payment("institution", options_win),
-                                   bg="#2e7d32", fg="white", font=("Segoe UI", 11, "bold"),
-                                   padx=20, pady=8, cursor="hand2")
-        institution_btn.pack(pady=10)
-        
-        # Close button
-        close_btn = tk.Button(main_container, text="❌ Cancel", command=options_win.destroy,
-                             bg="#6c757d", fg="white", font=("Segoe UI", 11),
-                             padx=20, pady=8, cursor="hand2")
-        close_btn.pack(pady=(20, 0))
-    
-    def process_payment(self, plan_type, parent_win):
-        """Process payment and upgrade seamlessly"""
-        # Close options window
-        parent_win.destroy()
-        
-        # Show payment processing
-        payment_win = tk.Toplevel(self.root)
-        payment_win.title("Payment - ClassFlow Premium")
-        payment_win.geometry("500x300")
-        payment_win.resizable(False, False)
-        payment_win.configure(bg="#f8f9fa")
-        
-        # Make modal and center
-        payment_win.transient(self.root)
-        payment_win.grab_set()
-        
-        # Center window
-        payment_win.update_idletasks()
-        x = (payment_win.winfo_screenwidth() // 2) - (500 // 2)
-        y = (payment_win.winfo_screenheight() // 2) - (300 // 2)
-        payment_win.geometry(f"500x300+{x}+{y}")
-        
-        main_container = tk.Frame(payment_win, bg="#f8f9fa")
-        main_container.pack(fill='both', expand=True, padx=40, pady=40)
-        
-        # Payment info
-        plan_name = "School Plan (₹499/month)" if plan_type == "school" else "Institution Plan (₹999/month)"
-        
-        tk.Label(main_container, text="💳 Payment Information", 
-                font=("Segoe UI", 16, "bold"), bg="#f8f9fa", fg="#2d6cdf").pack(pady=(0, 15))
-        
-        tk.Label(main_container, text=f"Selected: {plan_name}", 
-                font=("Segoe UI", 12, "bold"), bg="#f8f9fa").pack(pady=5)
-        
-        # Payment options
-        tk.Label(main_container, text="Choose Payment Method:", 
-                font=("Segoe UI", 11), bg="#f8f9fa").pack(pady=(10, 5))
-        
-        payment_frame = tk.Frame(main_container, bg="#f8f9fa")
-        payment_frame.pack(pady=10)
-        
-        # Payment buttons
-        razorpay_btn = tk.Button(payment_frame, text="💳 Pay with Razorpay", 
-                                command=lambda: self.open_payment_link(plan_type, "razorpay", payment_win),
-                                bg="#528ff0", fg="white", font=("Segoe UI", 11, "bold"),
-                                padx=15, pady=8, cursor="hand2")
-        razorpay_btn.pack(pady=5)
-        
-        paytm_btn = tk.Button(payment_frame, text="📱 Pay with PayTM", 
-                             command=lambda: self.open_payment_link(plan_type, "paytm", payment_win),
-                             bg="#00baf2", fg="white", font=("Segoe UI", 11, "bold"),
-                             padx=15, pady=8, cursor="hand2")
-        paytm_btn.pack(pady=5)
-        
-        # Manual activation option
-        tk.Label(main_container, text="Or contact sales for bank transfer/other options", 
-                font=("Segoe UI", 9), bg="#f8f9fa", fg="#6c757d").pack(pady=(15, 5))
-        
-        contact_btn = tk.Button(main_container, text="📞 Contact Sales", 
-                               command=self.contact_sales,
-                               bg="#6c757d", fg="white", font=("Segoe UI", 10),
-                               padx=15, pady=6, cursor="hand2")
-        contact_btn.pack(pady=5)
-        
-        # Close button
-        close_btn = tk.Button(main_container, text="❌ Cancel", command=payment_win.destroy,
-                             bg="#dc3545", fg="white", font=("Segoe UI", 10),
-                             padx=15, pady=6, cursor="hand2")
-        close_btn.pack(pady=(10, 0))
-    
-    def open_payment_link(self, plan_type, payment_method, parent_win):
-        """Open payment link and handle post-payment"""
-        import webbrowser
-        
-        # Close payment window
-        parent_win.destroy()
-        
-        # Payment URLs (replace with actual payment gateway URLs)
-        payment_urls = {
-            "school": {
-                "razorpay": "https://razorpay.me/@classflow499",
-                "paytm": "https://paytm.me/classflow-school"
-            },
-            "institution": {
-                "razorpay": "https://razorpay.me/@classflow999", 
-                "paytm": "https://paytm.me/classflow-institution"
-            }
-        }
-        
-        # Open payment URL
-        url = payment_urls.get(plan_type, {}).get(payment_method, "")
-        if url:
-            webbrowser.open(url)
-        
-        # Show post-payment instructions
-        self.show_post_payment_instructions(plan_type)
-    
-    def show_post_payment_instructions(self, plan_type):
-        """Show instructions after payment"""
-        instructions_win = tk.Toplevel(self.root)
-        instructions_win.title("Payment Submitted - ClassFlow Premium")
-        instructions_win.geometry("550x350")
-        instructions_win.resizable(False, False)
-        instructions_win.configure(bg="#f8f9fa")
-        
-        # Make modal and center
-        instructions_win.transient(self.root)
-        instructions_win.grab_set()
-        
-        # Center window
-        instructions_win.update_idletasks()
-        x = (instructions_win.winfo_screenwidth() // 2) - (550 // 2)
-        y = (instructions_win.winfo_screenheight() // 2) - (350 // 2)
-        instructions_win.geometry(f"550x350+{x}+{y}")
-        
-        main_container = tk.Frame(instructions_win, bg="#f8f9fa")
-        main_container.pack(fill='both', expand=True, padx=30, pady=30)
-        
-        # Success header
-        tk.Label(main_container, text="✅ Payment Submitted Successfully!", 
-                font=("Segoe UI", 16, "bold"), bg="#f8f9fa", fg="#28a745").pack(pady=(0, 15))
-        
-        # Instructions
-        instructions = [
-            "🔄 Your payment is being processed",
-            "📧 You will receive a license key via email within 24 hours",
-            "🔑 Use the license key to activate Premium features",
-            "📞 Contact support if you don't receive the key",
-            "💡 Save this information for your records"
-        ]
-        
-        for instruction in instructions:
-            tk.Label(main_container, text=instruction, font=("Segoe UI", 11), 
-                    bg="#f8f9fa", anchor='w', wraplength=490, justify='left').pack(fill='x', pady=3)
-        
-        # Contact info
-        contact_frame = tk.Frame(main_container, bg="#e3f2fd", relief="solid", borderwidth=1)
-        contact_frame.pack(fill='x', pady=(15, 10))
-        
-        tk.Label(contact_frame, text="📞 Support Contact", font=("Segoe UI", 12, "bold"), 
-                bg="#e3f2fd", fg="#1976d2").pack(pady=(8, 5))
-        tk.Label(contact_frame, text="Email: support@classflow.in\nPhone: +91-XXXX-XXXXXX", 
-                font=("Segoe UI", 10), bg="#e3f2fd", justify='center').pack(pady=(0, 8))
-        
-        # Close button
-        close_btn = tk.Button(main_container, text="✅ Got It", command=instructions_win.destroy,
-                             bg="#28a745", fg="white", font=("Segoe UI", 12, "bold"),
-                             padx=20, pady=8, cursor="hand2")
-        close_btn.pack(pady=(15, 0))
-    
-    def show_activation_dialog(self, parent_win=None):
-        """Show license activation dialog"""
-        if parent_win:
-            parent_win.destroy()
-        
-        activation_win = tk.Toplevel(self.root)
-        activation_win.title("Activate Premium License")
-        activation_win.geometry("500x300")
-        activation_win.resizable(False, False)
-        activation_win.configure(bg="#f8f9fa")
-        
-        # Make window modal and center it
-        activation_win.transient(self.root)
-        activation_win.grab_set()
-        
-        # Center the window
-        activation_win.update_idletasks()
-        x = (activation_win.winfo_screenwidth() // 2) - (500 // 2)
-        y = (activation_win.winfo_screenheight() // 2) - (300 // 2)
-        activation_win.geometry(f"500x300+{x}+{y}")
-        
-        # Main container
-        main_container = tk.Frame(activation_win, bg="#f8f9fa")
-        main_container.pack(fill='both', expand=True, padx=30, pady=30)
-        
-        # Title
-        title_label = tk.Label(main_container, 
-            text="🔑 Enter License Key",
-            font=("Segoe UI", 16, "bold"),
-            bg="#f8f9fa",
-            fg="#2d6cdf")
-        title_label.pack(pady=(0, 20))
-        
-        # Instructions
-        instructions = tk.Label(main_container,
-            text="Enter your ClassFlow Premium license key below:",
-            font=("Segoe UI", 11),
-            bg="#f8f9fa",
-            fg="#6c757d")
-        instructions.pack(pady=(0, 20))
-        
-        # License key entry
-        key_frame = tk.Frame(main_container, bg="#f8f9fa")
-        key_frame.pack(fill='x', pady=(0, 20))
-        
-        tk.Label(key_frame, text="License Key:", font=("Segoe UI", 12), bg="#f8f9fa").pack(anchor='w')
-        
-        license_key_var = tk.StringVar()
-        key_entry = tk.Entry(key_frame, 
-                            textvariable=license_key_var,
-                            font=("Segoe UI", 11),
-                            width=50)
-        key_entry.pack(fill='x', pady=(5, 0))
-        key_entry.focus()
-        
-        # Example format
-        example_label = tk.Label(key_frame,
-            text="Format: CFLOW-SCHOOL-XXXX-XXXX-XXXX-XXXX",
-            font=("Segoe UI", 9),
-            bg="#f8f9fa",
-            fg="#6c757d")
-        example_label.pack(anchor='w', pady=(5, 0))
-        
-        # Buttons
-        button_frame = tk.Frame(main_container, bg="#f8f9fa")
-        button_frame.pack(fill='x', pady=20)
-        
-        def activate_license():
-            license_key = license_key_var.get().strip()
-            if not license_key:
-                messagebox.showerror("Error", "Please enter a license key.")
-                return
-            
-            if self.license_manager.activate_premium_license(license_key):
-                messagebox.showinfo("Success", 
-                    "🎉 Premium license activated successfully!\n\n"
-                    "All premium features are now available.")
-                
-                # Update UI
-                self.update_button_states()
-                license_status = self.license_manager.get_license_status()
-                self.root.title(f"ClassFlow v2.0 - {license_status}")
-                
-                activation_win.destroy()
-            else:
-                messagebox.showerror("Invalid License", 
-                    "The license key is invalid. Please check and try again.\n\n"
-                    "Contact sales if you need assistance.")
-        
-        # Activate button
-        activate_btn = tk.Button(button_frame, 
-                                text="✅ Activate License",
-                                command=activate_license,
-                                bg="#28a745",
-                                fg="white",
-                                font=("Segoe UI", 12, "bold"),
-                                relief="flat",
-                                padx=20,
-                                pady=8,
-                                cursor="hand2")
-        activate_btn.pack(side='left')
-        
-        # Cancel button
-        cancel_btn = tk.Button(button_frame, 
-                              text="❌ Cancel",
-                              command=activation_win.destroy,
-                              bg="#6c757d",
-                              fg="white",
-                              font=("Segoe UI", 12),
-                              relief="flat",
-                              padx=20,
-                              pady=8,
-                              cursor="hand2")
-        cancel_btn.pack(side='right')
-        
-        # Bind Enter key
-        activation_win.bind('<Return>', lambda e: activate_license())
-        activation_win.bind('<Escape>', lambda e: activation_win.destroy())
-    
-    def contact_sales(self):
-        """Show contact information for sales"""
-        messagebox.showinfo("Contact Sales",
-            "📞 Contact ClassFlow Sales\n\n"
-            "Email: sales@hypersync.ai\n"
-            "Phone: +91-XXXX-XXXX-XX\n"
-            "Website: www.classflow.ai\n\n"
-            "Our team will help you choose the right plan\n"
-            "and provide immediate license activation!")
-
     def _set_theme(self):
         self.style = ttk.Style()
         self.root.configure(bg="#f0f4f8")
@@ -931,11 +395,34 @@ class TimetableApp:
         self.style.configure('FancyCell.TLabel', background="#eaf0fa", font=("Segoe UI", 9))
 
     def load_config(self):
-        """Optimized config loading with caching"""
+        """Optimized config loading with license validation"""
         try:
             if os.path.exists(CONFIG_FILE):
                 with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
-                    return json.load(f)
+                    config = json.load(f)
+                    
+                # Validate config against license limits
+                violations, validated_config = self.license_manager.validate_config_limits(config)
+                
+                if violations:
+                    # Show warning about exceeded limits
+                    license_status = self.license_manager.get_license_status()
+                    warning_msg = f"⚠️ Configuration exceeds {license_status} limits:\n\n"
+                    warning_msg += "\n".join(f"• {violation}" for violation in violations)
+                    warning_msg += f"\n\n✂️ Configuration has been automatically adjusted to comply with license limits."
+                    warning_msg += f"\n\n🚀 Upgrade to Premium for unlimited access!"
+                    
+                    messagebox.showwarning("License Limits Exceeded", warning_msg)
+                    
+                    # Save the corrected config
+                    try:
+                        with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+                            json.dump(validated_config, f, indent=2)
+                    except IOError:
+                        pass
+                
+                return validated_config
+                
         except (json.JSONDecodeError, IOError):
             pass
         
@@ -978,229 +465,339 @@ class TimetableApp:
             if 'week' not in columns:
                 self.c.execute('ALTER TABLE timetable ADD COLUMN week INTEGER')
         
-        # Create teacher restrictions table for class-section limitations
-        self.c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='teacher_restrictions'")
-        if not self.c.fetchone():
-            self.c.execute('''CREATE TABLE teacher_restrictions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                teacher TEXT,
-                class TEXT,
-                section TEXT,
-                UNIQUE(teacher, class, section)
-            )''')
-        
         self.conn.commit()
 
-    def get_teacher_restrictions(self, teacher):
-        """Get list of (class, section) tuples that a teacher can teach"""
-        self.c.execute("SELECT class, section FROM teacher_restrictions WHERE teacher = ?", (teacher,))
-        return self.c.fetchall()
-    
-    def can_teacher_teach_class_section(self, teacher, class_name, section):
-        """Check if a teacher can teach a specific class-section combination"""
-        self.c.execute(
-            "SELECT COUNT(*) FROM teacher_restrictions WHERE teacher = ? AND class = ? AND section = ?",
-            (teacher, class_name, section)
-        )
-        count = self.c.fetchone()[0]
+    def create_menu_bar(self):
+        """Create menu bar with upgrade and help options"""
+        menubar = tk.Menu(self.root)
+        self.root.config(menu=menubar)
         
-        # If no restrictions exist for this teacher, they can teach any class-section
-        self.c.execute("SELECT COUNT(*) FROM teacher_restrictions WHERE teacher = ?", (teacher,))
-        total_restrictions = self.c.fetchone()[0]
+        # File menu
+        file_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="File", menu=file_menu)
+        file_menu.add_command(label="📁 Load Timetable", command=self.load_timetable)
+        file_menu.add_command(label="💾 Save Timetable", command=self.save_timetable)
+        file_menu.add_separator()
+        file_menu.add_command(label="📊 Export Excel", command=self.export_excel)
+        file_menu.add_command(label="📄 Export PDF", command=self.export_pdf)
+        file_menu.add_separator()
+        file_menu.add_command(label="❌ Exit", command=self.root.quit)
         
-        if total_restrictions == 0:
-            return True  # No restrictions means can teach anywhere
+        # License menu (prominent for upgrades)
+        license_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="💎 License", menu=license_menu)
         
-        return count > 0  # Can teach if specifically allowed
-
-    def filter_teachers_by_restrictions(self, teachers, class_name, section):
-        """Filter teachers based on class-section restrictions"""
-        filtered_teachers = []
-        for teacher in teachers:
-            if self.can_teacher_teach_class_section(teacher, class_name, section):
-                filtered_teachers.append(teacher)
-        return filtered_teachers
+        # Show different options based on license status
+        if self.license_manager.is_premium():
+            license_menu.add_command(label="✅ Premium Active", state='disabled')
+            license_menu.add_command(label="📝 License Details", command=self.show_license_details)
+        else:
+            license_menu.add_command(label="🚀 UPGRADE TO PREMIUM", command=self.show_upgrade_dialog)
+            license_menu.add_command(label="🔑 Activate License Key", command=self.show_license_activation)
+            license_menu.add_command(label="💰 Purchase License", command=self.show_purchase_options)
+            license_menu.add_separator()
+            
+            if self.license_manager.is_trial_active():
+                days_left = self.license_manager.get_trial_days_remaining()
+                license_menu.add_command(label=f"⏰ Trial: {days_left} days left", state='disabled')
+            else:
+                license_menu.add_command(label="📋 Free Version Limits", command=self.show_free_limits)
+        
+        # Tools menu
+        tools_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Tools", menu=tools_menu)
+        tools_menu.add_command(label="🤖 Auto-Assign", command=self.auto_assign)
+        tools_menu.add_command(label="✨ Smart Match", command=self.smart_match)
+        tools_menu.add_command(label="👨‍🏫 Teacher Mapping", command=self.show_teacher_subject_mapping)
+        tools_menu.add_command(label="🏖️ Teacher Leave", command=self.mark_leave)
+        tools_menu.add_command(label="🔒 Edit Restrictions", command=self.edit_restrictions)
+        
+        # Help menu
+        help_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Help", menu=help_menu)
+        help_menu.add_command(label="📥 Check for Updates", command=self.check_for_updates)
+        help_menu.add_command(label="📖 User Guide", command=self.show_user_guide)
+        help_menu.add_command(label="💬 Contact Support", command=self.contact_support)
+        help_menu.add_command(label="🌐 Visit Website", command=self.open_website)
+        help_menu.add_separator()
+        help_menu.add_command(label="ℹ️ About ClassFlow", command=self.show_about)
 
     def setup_ui(self):
-        # Header with app name and beta label, improved alignment and color
-        header_frame = tk.Frame(self.root, bg="#2d6cdf")
-        header_frame.pack(fill='x', padx=0, pady=(0, 5))
-        header_label = tk.Label(header_frame, text="Class Flow v1.3", font=("Segoe UI", 26, "bold"), bg="#2d6cdf", fg="#fff", anchor="center")
-        header_label.pack(side='left', expand=True, fill='x', pady=(10, 0), padx=(20, 0))
+        # Create menu bar for easy access to upgrade and help
+        self.create_menu_bar()
         
-        # Date and time info frame
-        datetime_frame = tk.Frame(header_frame, bg="#2d6cdf")
-        datetime_frame.pack(side='right', padx=(10, 20), pady=(10, 0))
+        # V1.4 Style Header - Enhanced visual design
+        header_frame = tk.Frame(self.root, bg="#1e3a8a", height=80)
+        header_frame.pack(fill='x', padx=0, pady=0)
+        header_frame.pack_propagate(False)
         
-        # Current date display
-        date_label = tk.Label(datetime_frame, text=f"{self.current_date_str}", 
-                             font=("Segoe UI", 12, "bold"), bg="#2d6cdf", fg="#ffe082", anchor="e")
-        date_label.pack(anchor='e')
+        # Main title with enhanced styling
+        title_frame = tk.Frame(header_frame, bg="#1e3a8a")
+        title_frame.pack(expand=True, fill='both')
         
-        # Current time display  
-        self.time_label = tk.Label(datetime_frame, text=f"{self.current_time_str}", 
-                                  font=("Segoe UI", 10), bg="#2d6cdf", fg="#ffffff", anchor="e")
-        self.time_label.pack(anchor='e')
+        # App title
+        header_label = tk.Label(title_frame, 
+                              text="🎓 ClassFlow v2.0 BETA", 
+                              font=("Segoe UI", 28, "bold"), 
+                              bg="#1e3a8a", 
+                              fg="#ffffff", 
+                              anchor="center")
+        header_label.pack(side='left', expand=True, fill='both', pady=15)
         
-        # Academic week display
-        week_label = tk.Label(datetime_frame, text=f"Academic Week: {self.current_week}", 
-                             font=("Segoe UI", 10), bg="#2d6cdf", fg="#ffe082", anchor="e")
-        week_label.pack(anchor='e')
+        # Status section (right side)
+        status_frame = tk.Frame(header_frame, bg="#1e3a8a")
+        status_frame.pack(side='right', fill='y', padx=20)
         
-        beta_label = tk.Label(header_frame, text="beta release", font=("Segoe UI", 12, "italic"), bg="#2d6cdf", fg="#ffe082", anchor="w")
-        beta_label.pack(side='left', pady=(18, 0), padx=(10, 20))
+        # Current date and time display - ENHANCED VISIBILITY
+        current_datetime = datetime.now().strftime("%d %B %Y | %I:%M %p")
+        self.datetime_label = tk.Label(status_frame, 
+                                     text=f"� {current_datetime}", 
+                                     font=("Segoe UI", 13, "bold"), 
+                                     bg="#1e3a8a", 
+                                     fg="#fbbf24",
+                                     anchor="center",
+                                     relief="solid",
+                                     bd=1)
+        self.datetime_label.pack(pady=(15, 8))
         
-        # Start time update loop
-        self.update_time()
+        # Start datetime update timer
+        self.update_datetime()
+        
+        # Week display with modern styling
+        week_display = tk.Label(status_frame, 
+                              text=f"� Week {self.current_week}", 
+                              font=("Segoe UI", 12), 
+                              bg="#1e3a8a", 
+                              fg="#94a3b8",
+                              anchor="center")
+        week_display.pack(pady=(0, 5))
+        
+        # License status with upgrade button
+        license_text = self.license_manager.get_license_status()
+        license_color = "#10b981" if self.license_manager.is_premium() else "#f59e0b"
+        
+        # Show clear trial/free/premium status
+        if self.license_manager.license_data["license_type"] == "TRIAL":
+            trial_days = self.license_manager.get_trial_days_remaining()
+            if trial_days > 0:
+                status_text = f"🎯 TRIAL - {trial_days} days left"
+                status_color = "#f59e0b"
+            else:
+                status_text = "⚠️ TRIAL EXPIRED"
+                status_color = "#ef4444"
+        elif self.license_manager.license_data["license_type"] == "FREE":
+            status_text = "🆓 FREE VERSION"
+            status_color = "#6b7280"
+        else:
+            status_text = f"💎 {license_text}"
+            status_color = "#10b981"
+        
+        license_status = tk.Label(status_frame, 
+                                text=status_text, 
+                                font=("Segoe UI", 11, "bold"), 
+                                bg="#1e3a8a", 
+                                fg=status_color,
+                                anchor="center")
+        license_status.pack(pady=(0, 5))
+        
+        # Upgrade button for non-premium users - ALWAYS SHOW FOR TESTING
+        # Force show upgrade button regardless of license status
+        upgrade_btn = tk.Button(status_frame,
+                              text="🚀 UPGRADE TO PREMIUM",
+                              command=self.show_upgrade_dialog,
+                              font=('Segoe UI', 9, 'bold'),
+                              bg='#f59e0b',
+                              fg='white',
+                              activebackground='#d97706',
+                              relief='raised',
+                              bd=2,
+                              padx=10,
+                              pady=3,
+                              cursor='hand2')
+        upgrade_btn.pack(pady=(0, 10))
 
-        # PROMINENT FIXED SAVE PANEL - Always visible at top
-        save_panel = tk.Frame(self.root, bg="#2d6cdf", relief="raised", borderwidth=4, height=70)
-        save_panel.pack(fill='x', padx=5, pady=5)
-        save_panel.pack_propagate(False)
-        
-        # Save panel content with large save button
-        save_content = tk.Frame(save_panel, bg="#2d6cdf")
-        save_content.pack(expand=True, fill='both', padx=15, pady=10)
-        
-        # Huge prominent save button - impossible to miss
-        self.main_save_btn = tk.Button(save_content, 
-                                      text="💾 SAVE TIMETABLE NOW", 
-                                      command=self.save_timetable,
-                                      font=("Segoe UI", 16, "bold"),
-                                      bg="#28a745", 
-                                      fg="white",
-                                      relief="raised",
-                                      borderwidth=4,
-                                      padx=30,
-                                      pady=10,
-                                      cursor="hand2",
-                                      activebackground="#218838",
-                                      activeforeground="white")
-        self.main_save_btn.pack(side='left')
-        
-        # Auto-save status indicator
-        self.auto_save_indicator = tk.Label(save_content,
-                                           text="🔄 AUTO-SAVE: ENABLED",
-                                           font=("Segoe UI", 12, "bold"),
-                                           bg="#2d6cdf",
-                                           fg="#90EE90")
-        self.auto_save_indicator.pack(side='left', padx=30)
-        
-        # Save status display
-        self.save_status_display = tk.Label(save_content,
-                                           text="📊 Ready to save your timetable",
-                                           font=("Segoe UI", 11),
-                                           bg="#2d6cdf",
-                                           fg="white")
-        self.save_status_display.pack(side='left', padx=20)
-        
-        # Current time in save panel
-        self.save_panel_time = tk.Label(save_content,
-                                       text=f"📅 {self.current_date_str}",
-                                       font=("Segoe UI", 10),
-                                       bg="#2d6cdf",
-                                       fg="white")
-        self.save_panel_time.pack(side='right')
-
-        # Top controls - now below save panel
+        # Top controls
         controls = ttk.Frame(self.root)
         controls.pack(fill='x', padx=10, pady=5)
 
         ttk.Label(controls, text="Year:").pack(side='left')
         ttk.Entry(controls, textvariable=self.selected_year, width=6).pack(side='left', padx=5)
         
-        ttk.Label(controls, text="Week:").pack(side='left')
-        ttk.Entry(controls, textvariable=self.selected_week, width=4).pack(side='left', padx=5)
+        # Left side - Week controls and Load button
+        left_frame = ttk.Frame(controls)
+        left_frame.pack(side='left', fill='x', expand=True)
         
-        # Load button (save is now in prominent panel above)
-        ttk.Button(controls, text="📂 Load Timetable", command=self.load_timetable).pack(side='left', padx=10)
+        ttk.Label(left_frame, text="Week:").pack(side='left')
+        ttk.Entry(left_frame, textvariable=self.selected_week, width=4).pack(side='left', padx=5)
+        ttk.Button(left_frame, text="Load", command=self.load_timetable).pack(side='left', padx=5)
         
-        # Quick status indicator for controls row
-        self.quick_status = ttk.Label(controls, text="� Large SAVE button available above ⬆️", foreground="blue")
-        self.quick_status.pack(side='left', padx=20)
+        # Right side - Prominent SAVE button (v1.4 style)
+        save_frame = ttk.Frame(controls)
+        save_frame.pack(side='right', padx=10)
         
-        # License status display
-        license_frame = ttk.Frame(self.root)
-        license_frame.pack(fill='x', padx=10, pady=2)
+        # Create prominent save button like v1.4
+        self.save_button = tk.Button(save_frame, 
+                                   text="💾 SAVE TIMETABLE", 
+                                   command=self.save_timetable,
+                                   font=('Arial', 12, 'bold'),
+                                   bg='#4CAF50',
+                                   fg='white',
+                                   activebackground='#45a049',
+                                   activeforeground='white',
+                                   relief='raised',
+                                   bd=3,
+                                   padx=20,
+                                   pady=8,
+                                   cursor='hand2')
+        self.save_button.pack(side='right')
         
-        # License status label
-        license_status = self.license_manager.get_license_status()
-        trial_days = self.license_manager.get_trial_days_remaining()
+        # Edit buttons on far right
+        edit_frame = ttk.Frame(controls)
+        edit_frame.pack(side='right', padx=10)
+        ttk.Button(edit_frame, text="Edit Classes", command=self.edit_classes).pack(side='right', padx=2)
+        ttk.Button(edit_frame, text="Edit Sections", command=self.edit_sections).pack(side='right', padx=2)
+        ttk.Button(edit_frame, text="Edit Teachers", command=self.edit_teachers).pack(side='right', padx=2)
         
-        if self.license_manager.license_data["license_type"] == "TRIAL" and trial_days > 0:
-            status_color = "#ff6b35" if trial_days <= 7 else "#28a745"
-            status_text = f"🚀 {license_status} - Upgrade to Premium for unlimited access!"
-        elif self.license_manager.license_data["license_type"] == "FREE":
-            status_color = "#6c757d"
-            status_text = "📝 Free Version - Limited features | Upgrade to Premium for full access"
-        elif self.license_manager.license_data["license_type"] == "PREMIUM":
-            status_color = "#28a745"
-            status_text = "✨ Premium License Active - All features unlocked!"
-        else:
-            status_color = "#dc3545"
-            status_text = "⚠️ Trial Expired - Upgrade to continue using advanced features"
+        # Action buttons with v1.4 enhanced styling
+        actions = tk.Frame(self.root, bg='#f8f9fa', relief='ridge', bd=1)
+        actions.pack(fill='x', padx=10, pady=(10, 5))
         
-        self.license_status_label = ttk.Label(license_frame, 
-                                             text=status_text,
-                                             foreground=status_color,
-                                             font=("Segoe UI", 9, "bold"))
-        self.license_status_label.pack(side='left')
+        # Left side action buttons
+        left_actions = tk.Frame(actions, bg='#f8f9fa')
+        left_actions.pack(side='left', fill='x', expand=True, pady=8, padx=10)
         
-        # Show remaining features for free users
-        if not self.license_manager.is_premium() and self.license_manager.license_data["license_type"] != "TRIAL":
-            limits_text = f"Limits: {self.license_manager.get_feature_limit('max_classes')} classes, {self.license_manager.get_feature_limit('max_sections')} sections, {self.license_manager.get_feature_limit('max_teachers')} teachers"
-            limits_label = ttk.Label(license_frame,
-                                    text=limits_text,
-                                    foreground="#856404",
-                                    font=("Segoe UI", 8))
-            limits_label.pack(side='left', padx=(20, 0))
+        # Core action buttons with enhanced styling
+        auto_assign_btn = tk.Button(left_actions, 
+                                  text="🤖 Auto-Assign", 
+                                  command=self.auto_assign,
+                                  font=('Segoe UI', 10, 'bold'),
+                                  bg='#3b82f6',
+                                  fg='white',
+                                  activebackground='#2563eb',
+                                  relief='raised',
+                                  bd=2,
+                                  padx=15,
+                                  pady=5,
+                                  cursor='hand2')
+        auto_assign_btn.pack(side='left', padx=5)
         
-        # Move edit buttons to separate row to make space
-        edit_frame = ttk.Frame(self.root)
-        edit_frame.pack(fill='x', padx=10, pady=2)
+        smart_match_btn = tk.Button(left_actions, 
+                                  text="✨ Smart Match", 
+                                  command=self.smart_match,
+                                  font=('Segoe UI', 10, 'bold'),
+                                  bg='#10b981',
+                                  fg='white',
+                                  activebackground='#059669',
+                                  relief='raised',
+                                  bd=2,
+                                  padx=15,
+                                  pady=5,
+                                  cursor='hand2')
+        smart_match_btn.pack(side='left', padx=5)
         
-        ttk.Label(edit_frame, text="Configuration:").pack(side='left', padx=5)
-        ttk.Button(edit_frame, text="Edit Classes", command=self.edit_classes).pack(side='left', padx=5)
-        ttk.Button(edit_frame, text="Edit Sections", command=self.edit_sections).pack(side='left', padx=5)
-        ttk.Button(edit_frame, text="Edit Teachers", command=self.edit_teachers).pack(side='left', padx=5)
+        teacher_map_btn = tk.Button(left_actions, 
+                                  text="👨‍🏫 Teacher Mapping", 
+                                  command=self.show_teacher_subject_mapping,
+                                  font=('Segoe UI', 10),
+                                  bg='#6366f1',
+                                  fg='white',
+                                  activebackground='#4f46e5',
+                                  relief='raised',
+                                  bd=2,
+                                  padx=12,
+                                  pady=5,
+                                  cursor='hand2')
+        teacher_map_btn.pack(side='left', padx=5)
         
-        # Action buttons
-        actions = ttk.Frame(self.root)
-        actions.pack(fill='x', padx=10, pady=5)
+        leave_btn = tk.Button(left_actions, 
+                            text="🏖️ Teacher Leave", 
+                            command=self.mark_leave,
+                            font=('Segoe UI', 10),
+                            bg='#f59e0b',
+                            fg='white',
+                            activebackground='#d97706',
+                            relief='raised',
+                            bd=2,
+                            padx=12,
+                            pady=5,
+                            cursor='hand2')
+        leave_btn.pack(side='left', padx=5)
         
-        # Actions and tools section
-        self.auto_assign_btn = ttk.Button(actions, text="Auto-Assign", command=self.check_auto_assign)
-        self.auto_assign_btn.pack(side='left', padx=5)
+        # Edit Restrictions button
+        restrictions_btn = tk.Button(left_actions, 
+                                   text="🔒 Edit Restrictions", 
+                                   command=self.edit_restrictions,
+                                   font=('Segoe UI', 10),
+                                   bg='#8b5cf6',
+                                   fg='white',
+                                   activebackground='#7c3aed',
+                                   relief='raised',
+                                   bd=2,
+                                   padx=12,
+                                   pady=5,
+                                   cursor='hand2')
+        restrictions_btn.pack(side='left', padx=5)
         
-        self.smart_match_btn = ttk.Button(actions, text="Smart Match", command=self.check_smart_match, style='Green.TButton')
-        self.smart_match_btn.pack(side='left', padx=5)
+        # Right side export buttons
+        right_actions = tk.Frame(actions, bg='#f8f9fa')
+        right_actions.pack(side='right', pady=8, padx=10)
         
-        # Configuration section
-        ttk.Button(actions, text="Teacher Mapping", command=self.show_teacher_subject_mapping).pack(side='left', padx=5)
+        export_excel_btn = tk.Button(right_actions, 
+                                   text="📊 Export Excel", 
+                                   command=self.export_excel,
+                                   font=('Segoe UI', 10),
+                                   bg='#059669',
+                                   fg='white',
+                                   activebackground='#047857',
+                                   relief='raised',
+                                   bd=2,
+                                   padx=12,
+                                   pady=5,
+                                   cursor='hand2')
+        export_excel_btn.pack(side='right', padx=5)
         
-        self.teacher_restrictions_btn = ttk.Button(actions, text="Teacher Restrictions", command=self.check_teacher_restrictions)
-        self.teacher_restrictions_btn.pack(side='left', padx=5)
+        export_pdf_btn = tk.Button(right_actions, 
+                                 text="📄 Export PDF", 
+                                 command=self.export_pdf,
+                                 font=('Segoe UI', 10),
+                                 bg='#dc2626',
+                                 fg='white',
+                                 activebackground='#b91c1c',
+                                 relief='raised',
+                                 bd=2,
+                                 padx=12,
+                                 pady=5,
+                                 cursor='hand2')
+        export_pdf_btn.pack(side='right', padx=5)
         
-        ttk.Button(actions, text="Setup", command=self.show_setup).pack(side='left', padx=5)
+        refresh_btn = tk.Button(right_actions, 
+                              text="🔄 Refresh", 
+                              command=self.refresh_grid,
+                              font=('Segoe UI', 10),
+                              bg='#6b7280',
+                              fg='white',
+                              activebackground='#4b5563',
+                              relief='raised',
+                              bd=2,
+                              padx=12,
+                              pady=5,
+                              cursor='hand2')
+        refresh_btn.pack(side='right', padx=5)
         
-        # Operations section  
-        self.teacher_leave_btn = ttk.Button(actions, text="Teacher Leave", command=self.check_teacher_leave)
-        self.teacher_leave_btn.pack(side='left', padx=5)
-        
-        ttk.Button(actions, text="Export Excel", command=self.export_excel).pack(side='left', padx=5)
-        
-        self.export_pdf_btn = ttk.Button(actions, text="Export PDF", command=self.check_export_pdf)
-        self.export_pdf_btn.pack(side='left', padx=5)
-        
-        ttk.Button(actions, text="Refresh", command=self.refresh_grid).pack(side='left', padx=5)
-        
-        # Add upgrade button if not premium
-        if not self.license_manager.is_premium() and self.license_manager.get_trial_days_remaining() <= 7:
-            upgrade_btn = ttk.Button(actions, text="🚀 Upgrade to Premium", command=self.show_upgrade_dialog)
-            upgrade_btn.pack(side='right', padx=10)
-        
-        # Update button states based on license
-        self.update_button_states()
+        # Check for updates button
+        update_btn = tk.Button(right_actions, 
+                             text="📥 Updates", 
+                             command=self.check_for_updates,
+                             font=('Segoe UI', 10),
+                             bg='#6366f1',
+                             fg='white',
+                             activebackground='#4f46e5',
+                             relief='raised',
+                             bd=2,
+                             padx=12,
+                             pady=5,
+                             cursor='hand2')
+        update_btn.pack(side='right', padx=5)
 
         # Grid with scrollbars
         self.grid_container = ttk.Frame(self.root)
@@ -1232,37 +829,886 @@ class TimetableApp:
         # Add additional scroll event bindings
         self._bind_scroll_events()
         
-        # Add Hypersync footer at the bottom
-        footer_frame = ttk.Frame(self.root)
-        footer_frame.pack(fill='x', pady=(5, 0))
+        # Add status bar at the bottom
+        self.status_bar = tk.Label(self.root, text="Ready", relief=tk.SUNKEN, anchor="w", 
+                                 bg="#f0f0f0", font=("Segoe UI", 9))
+        self.status_bar.pack(fill="x", side="bottom")
         
-        footer_label = ttk.Label(footer_frame, text="Hypersync - An AI based education startup", 
-                                font=("Segoe UI", 9), foreground="#666666")
-        footer_label.pack(anchor='center')
+        # Add footer message
+        footer_frame = tk.Frame(self.root, bg="#1e3a8a", height=30)
+        footer_frame.pack(fill='x', side='bottom')
+        footer_frame.pack_propagate(False)
+        
+        footer_text = "🎓 ClassFlow v2.0 BETA - Professional School Timetable Management System | © 2025 TimeTablePlanner | Beta Testing Phase"
+        footer_label = tk.Label(footer_frame, 
+                              text=footer_text,
+                              font=("Segoe UI", 9),
+                              bg="#1e3a8a",
+                              fg="#94a3b8",
+                              anchor="center")
+        footer_label.pack(expand=True, fill='both')
         
         # Initial grid draw
         self.draw_grid()
-        
-        # Status bar at bottom for save feedback
-        status_frame = ttk.Frame(self.root)
-        status_frame.pack(fill='x', side='bottom', padx=10, pady=2)
-        
-        # Save status indicator
-        self.bottom_save_status = ttk.Label(status_frame, text="💾 Save Status: Auto-save enabled | Manual Save button available above", foreground="green", font=("Segoe UI", 9))
-        self.bottom_save_status.pack(side='left')
-        
-        # Current academic info
-        academic_info = ttk.Label(status_frame, text=f"📚 Academic Week {self.current_week} | {self.current_date_str}", font=("Segoe UI", 9))
-        academic_info.pack(side='right')
 
-    def update_time(self):
-        """Update the time display every minute"""
-        now = datetime.now()
-        new_time_str = now.strftime("%I:%M %p")
-        if hasattr(self, 'time_label'):
-            self.time_label.config(text=new_time_str)
-        # Schedule next update in 60 seconds
-        self.root.after(60000, self.update_time)
+    def show_upgrade_dialog(self):
+        """Show upgrade to premium dialog"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Upgrade to Premium")
+        dialog.geometry("500x600")
+        dialog.resizable(False, False)
+        dialog.configure(bg='#ffffff')
+        
+        # Center the dialog
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        # Header
+        header_frame = tk.Frame(dialog, bg='#3b82f6', height=80)
+        header_frame.pack(fill='x')
+        header_frame.pack_propagate(False)
+        
+        header_label = tk.Label(header_frame, 
+                              text="🚀 Upgrade to Premium", 
+                              font=("Segoe UI", 20, "bold"),
+                              bg='#3b82f6', 
+                              fg='white')
+        header_label.pack(expand=True)
+        
+        # Content frame
+        content_frame = tk.Frame(dialog, bg='#ffffff')
+        content_frame.pack(fill='both', expand=True, padx=30, pady=20)
+        
+        # Current plan info
+        current_frame = tk.Frame(content_frame, bg='#fef3c7', relief='ridge', bd=2)
+        current_frame.pack(fill='x', pady=(0, 20))
+        
+        tk.Label(current_frame, 
+                text=f"Current Plan: {self.license_manager.get_license_status()}", 
+                font=("Segoe UI", 12, "bold"),
+                bg='#fef3c7',
+                fg='#92400e').pack(pady=10)
+        
+        # Premium features
+        features_label = tk.Label(content_frame, 
+                                text="Premium Features:", 
+                                font=("Segoe UI", 14, "bold"),
+                                bg='#ffffff')
+        features_label.pack(anchor='w', pady=(0, 10))
+        
+        features = [
+            "✅ Unlimited Classes, Sections & Teachers",
+            "✅ Advanced Auto-Assign Algorithm", 
+            "✅ Smart Conflict Detection",
+            "✅ Teacher Leave Management",
+            "✅ Professional PDF/Excel Export",
+            "✅ Priority Email Support",
+            "✅ Custom Branding Options"
+        ]
+        
+        for feature in features:
+            feature_label = tk.Label(content_frame, 
+                                   text=feature, 
+                                   font=("Segoe UI", 11),
+                                   bg='#ffffff',
+                                   fg='#059669')
+            feature_label.pack(anchor='w', pady=2)
+        
+        # Pricing section
+        pricing_frame = tk.Frame(content_frame, bg='#f0f9ff', relief='ridge', bd=2)
+        pricing_frame.pack(fill='x', pady=20)
+        
+        tk.Label(pricing_frame, 
+                text="🏫 School Plan - ₹499/month", 
+                font=("Segoe UI", 16, "bold"),
+                bg='#f0f9ff',
+                fg='#1e40af').pack(pady=15)
+        
+        # License key entry
+        key_frame = tk.Frame(content_frame, bg='#ffffff')
+        key_frame.pack(fill='x', pady=10)
+        
+        tk.Label(key_frame, 
+                text="Enter License Key:", 
+                font=("Segoe UI", 12, "bold"),
+                bg='#ffffff').pack(anchor='w')
+        
+        self.license_key_var = tk.StringVar()
+        key_entry = tk.Entry(key_frame, 
+                           textvariable=self.license_key_var,
+                           font=("Segoe UI", 11),
+                           width=40)
+        key_entry.pack(fill='x', pady=5)
+        
+        # Buttons
+        button_frame = tk.Frame(content_frame, bg='#ffffff')
+        button_frame.pack(fill='x', pady=20)
+        
+        def activate_license():
+            key = self.license_key_var.get().strip()
+            if key:
+                if self.license_manager.activate_license(key):
+                    messagebox.showinfo("Success", "License activated successfully!")
+                    dialog.destroy()
+                    self.update_title()
+                    self.update_status_bar()
+                else:
+                    messagebox.showerror("Error", "Invalid license key!")
+            else:
+                messagebox.showwarning("Warning", "Please enter a license key!")
+        
+        def contact_sales():
+            messagebox.showinfo("Contact Sales", 
+                              "Contact us for purchasing license:\n\n" +
+                              "📧 Email: prashant.compsc@gmail.com\n" +
+                              "🌐 Website: www.classflow.ai\n" +
+                              "📱 Phone: +91-XXXX-XXXX-XX")
+        
+        # Activate button
+        activate_btn = tk.Button(button_frame,
+                               text="🔑 Activate License",
+                               command=activate_license,
+                               font=('Segoe UI', 12, 'bold'),
+                               bg='#10b981',
+                               fg='white',
+                               activebackground='#059669',
+                               relief='raised',
+                               bd=3,
+                               padx=20,
+                               pady=8)
+        activate_btn.pack(side='left', padx=(0, 10))
+        
+        # Purchase online button (prominent)
+        purchase_btn = tk.Button(button_frame,
+                               text="💳 Purchase Online",
+                               command=lambda: [dialog.destroy(), self.show_purchase_options()],
+                               font=('Segoe UI', 12, 'bold'),
+                               bg='#059669',
+                               fg='white',
+                               activebackground='#047857',
+                               relief='raised',
+                               bd=3,
+                               padx=20,
+                               pady=8)
+        purchase_btn.pack(side='left', padx=10)
+        
+        # Contact sales button
+        contact_btn = tk.Button(button_frame,
+                              text="💬 Contact Sales",
+                              command=contact_sales,
+                              font=('Segoe UI', 12),
+                              bg='#3b82f6',
+                              fg='white',
+                              activebackground='#2563eb',
+                              relief='raised',
+                              bd=3,
+                              padx=20,
+                              pady=8)
+        contact_btn.pack(side='left', padx=10)
+        
+        # Close button
+        close_btn = tk.Button(button_frame,
+                            text="❌ Close",
+                            command=dialog.destroy,
+                            font=('Segoe UI', 12),
+                            bg='#6b7280',
+                            fg='white',
+                            activebackground='#4b5563',
+                            relief='raised',
+                            bd=3,
+                            padx=20,
+                            pady=8)
+        close_btn.pack(side='right')
+
+    def check_for_updates(self):
+        """Check for latest updates/fixes"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Check for Updates")
+        dialog.geometry("450x300")
+        dialog.resizable(False, False)
+        dialog.configure(bg='#ffffff')
+        
+        # Center the dialog
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        # Header
+        header_frame = tk.Frame(dialog, bg='#6366f1', height=60)
+        header_frame.pack(fill='x')
+        header_frame.pack_propagate(False)
+        
+        header_label = tk.Label(header_frame, 
+                              text="🔄 Check for Updates", 
+                              font=("Segoe UI", 16, "bold"),
+                              bg='#6366f1', 
+                              fg='white')
+        header_label.pack(expand=True)
+        
+        # Content
+        content_frame = tk.Frame(dialog, bg='#ffffff')
+        content_frame.pack(fill='both', expand=True, padx=30, pady=20)
+        
+        # Current version info
+        current_version = "ClassFlow v2.0.1 (Build 20250811)"
+        version_label = tk.Label(content_frame, 
+                               text=f"Current Version: {current_version}", 
+                               font=("Segoe UI", 12, "bold"),
+                               bg='#ffffff',
+                               fg='#374151')
+        version_label.pack(pady=(0, 20))
+        
+        # Update status
+        status_label = tk.Label(content_frame, 
+                              text="✅ You are running the latest version!", 
+                              font=("Segoe UI", 12),
+                              bg='#ffffff',
+                              fg='#059669')
+        status_label.pack(pady=10)
+        
+        # Update notes
+        notes_label = tk.Label(content_frame, 
+                             text="Latest Fixes & Improvements:", 
+                             font=("Segoe UI", 11, "bold"),
+                             bg='#ffffff')
+        notes_label.pack(anchor='w', pady=(20, 5))
+        
+        notes = [
+            "• Enhanced v1.4 style UI with prominent save button",
+            "• Improved license management system",
+            "• Better teacher restriction enforcement",
+            "• Modern action buttons with icons",
+            "• Enhanced visual design and color scheme"
+        ]
+        
+        for note in notes:
+            note_label = tk.Label(content_frame, 
+                                text=note, 
+                                font=("Segoe UI", 10),
+                                bg='#ffffff',
+                                fg='#4b5563')
+            note_label.pack(anchor='w', pady=1)
+        
+        # Button frame
+        button_frame = tk.Frame(content_frame, bg='#ffffff')
+        button_frame.pack(fill='x', pady=20)
+        
+        # Switch to Premium button - ALWAYS SHOW FOR TESTING
+        premium_btn = tk.Button(button_frame,
+                              text="🚀 SWITCH TO PREMIUM",
+                              command=lambda: [dialog.destroy(), self.show_upgrade_dialog()],
+                              font=('Segoe UI', 12, 'bold'),
+                              bg='#059669',
+                              fg='white',
+                              activebackground='#047857',
+                              relief='raised',
+                              bd=3,
+                              padx=25,
+                              pady=8,
+                              state='normal')  # Ensure button is enabled
+        premium_btn.pack(side='left', padx=(0, 10))
+        
+        # Close button
+        close_btn = tk.Button(button_frame,
+                            text="✅ Close",
+                            command=dialog.destroy,
+                            font=('Segoe UI', 12),
+                            bg='#6366f1',
+                            fg='white',
+                            activebackground='#4f46e5',
+                            relief='raised',
+                            bd=3,
+                            padx=30,
+                            pady=8)
+        close_btn.pack(side='right')
+
+    def show_license_activation(self):
+        """Show enhanced license activation dialog with better visibility"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Activate License Key")
+        dialog.geometry("600x500")
+        dialog.resizable(True, True)
+        dialog.configure(bg='#ffffff')
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        # Header
+        header_frame = tk.Frame(dialog, bg='#10b981', height=70)
+        header_frame.pack(fill='x')
+        header_frame.pack_propagate(False)
+        
+        header_label = tk.Label(header_frame, 
+                              text="🔑 Activate ClassFlow Premium License", 
+                              font=("Segoe UI", 18, "bold"),
+                              bg='#10b981', 
+                              fg='white')
+        header_label.pack(expand=True)
+        
+        # Main content with scrollbar
+        main_frame = tk.Frame(dialog, bg='#ffffff')
+        main_frame.pack(fill='both', expand=True, padx=20, pady=20)
+        
+        # Create canvas and scrollbar
+        canvas = tk.Canvas(main_frame, bg='#ffffff', highlightthickness=0)
+        scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = tk.Frame(canvas, bg='#ffffff')
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # Pack canvas and scrollbar
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        # Content sections
+        # Instructions section
+        inst_frame = tk.LabelFrame(scrollable_frame, text="📋 Instructions", 
+                                 font=("Segoe UI", 12, "bold"), bg='#ffffff', 
+                                 fg='#374151', padx=15, pady=15)
+        inst_frame.pack(fill='x', pady=(0, 20))
+        
+        instructions_text = """Welcome to ClassFlow Premium Activation!
+
+To activate your premium license:
+1. Enter your license key in the text box below
+2. License keys are 25 characters long (e.g., CFPRO-XXXXX-XXXXX-XXXXX-XXXXX)
+3. Click 'Activate License' to unlock premium features
+4. Your license will be validated and activated immediately
+
+Premium features include:
+✅ Unlimited classes and sections
+✅ Advanced teacher restrictions
+✅ Priority customer support
+✅ Export to PDF functionality
+✅ Remove watermarks
+✅ Auto-save and backup features"""
+        
+        instructions = tk.Label(inst_frame,
+                              text=instructions_text,
+                              font=("Segoe UI", 10),
+                              bg='#ffffff',
+                              fg='#4b5563',
+                              justify='left',
+                              wraplength=500)
+        instructions.pack(anchor='w')
+        
+        # License key entry section
+        key_frame = tk.LabelFrame(scrollable_frame, text="🔑 Enter License Key", 
+                                font=("Segoe UI", 12, "bold"), bg='#ffffff', 
+                                fg='#374151', padx=15, pady=15)
+        key_frame.pack(fill='x', pady=(0, 20))
+        
+        tk.Label(key_frame, 
+                text="License Key (25 characters):", 
+                font=("Segoe UI", 11, "bold"),
+                bg='#ffffff',
+                fg='#374151').pack(anchor='w', pady=(0, 5))
+        
+        key_var = tk.StringVar()
+        key_entry = tk.Entry(key_frame, 
+                           textvariable=key_var,
+                           font=("Courier New", 12, "bold"),
+                           width=50,
+                           bg='#f8fafc',
+                           fg='#1e293b',
+                           relief='solid',
+                           bd=2,
+                           highlightthickness=1,
+                           highlightcolor='#10b981')
+        key_entry.pack(fill='x', pady=(5, 10), ipady=8)
+        key_entry.focus_set()
+        
+        # Example key format
+        example_label = tk.Label(key_frame,
+                               text="Example: CFPRO-ABC12-DEF34-GHI56-JKL78",
+                               font=("Segoe UI", 9, "italic"),
+                               bg='#ffffff',
+                               fg='#6b7280')
+        example_label.pack(anchor='w')
+        
+        # Purchase info section
+        purchase_frame = tk.LabelFrame(scrollable_frame, text="💰 Need a License Key?", 
+                                     font=("Segoe UI", 12, "bold"), bg='#ffffff', 
+                                     fg='#374151', padx=15, pady=15)
+        purchase_frame.pack(fill='x', pady=(0, 20))
+        
+        purchase_text = """Don't have a license key yet?
+
+🏫 School Plan: ₹499/month
+   • Up to 50 classes and 200 teachers
+   • Basic premium features
+
+🏛️ Institution Plan: ₹999/month  
+   • Unlimited classes and teachers
+   • All premium features + priority support
+
+📞 Contact us for enterprise pricing and bulk discounts!
+📧 Email: support@classflow.edu
+📱 WhatsApp: +91-9876543210"""
+        
+        purchase_info = tk.Label(purchase_frame,
+                               text=purchase_text,
+                               font=("Segoe UI", 10),
+                               bg='#ffffff',
+                               fg='#4b5563',
+                               justify='left',
+                               wraplength=500)
+        purchase_info.pack(anchor='w')
+        
+        def activate():
+            key = key_var.get().strip().upper()
+            if key:
+                if len(key) < 20:
+                    messagebox.showwarning("Invalid Key", "License key should be at least 20 characters long!")
+                    return
+                    
+                if self.license_manager.activate_license(key):
+                    messagebox.showinfo("Success", 
+                                      "🎉 License activated successfully!\n\n"
+                                      "ClassFlow Premium is now active.\n"
+                                      "Enjoy unlimited access to all features!")
+                    dialog.destroy()
+                    self.update_title()
+                    self.update_status_bar()
+                    # Refresh menu bar to show premium status
+                    self.create_menu_bar()
+                else:
+                    messagebox.showerror("Activation Failed", 
+                                       "❌ Invalid license key!\n\n"
+                                       "Please check your key and try again.\n"
+                                       "Contact support if the problem persists.")
+            else:
+                messagebox.showwarning("Missing Key", "Please enter a license key!")
+        
+        def purchase_online():
+            dialog.destroy()
+            self.show_purchase_options()
+        
+        # Buttons frame
+        button_frame = tk.Frame(scrollable_frame, bg='#ffffff')
+        button_frame.pack(fill='x', pady=20)
+        
+        # Purchase button
+        purchase_btn = tk.Button(button_frame,
+                               text="💳 Purchase License",
+                               command=purchase_online,
+                               font=('Segoe UI', 12, 'bold'),
+                               bg='#f59e0b',
+                               fg='white',
+                               activebackground='#d97706',
+                               relief='raised',
+                               bd=3,
+                               padx=20,
+                               pady=10)
+        purchase_btn.pack(side='left', padx=(0, 10))
+        
+        # Activate button
+        activate_btn = tk.Button(button_frame,
+                               text="🔑 Activate License",
+                               command=activate,
+                               font=('Segoe UI', 12, 'bold'),
+                               bg='#10b981',
+                               fg='white',
+                               activebackground='#059669',
+                               relief='raised',
+                               bd=3,
+                               padx=20,
+                               pady=10)
+        activate_btn.pack(side='left', padx=(0, 10))
+        
+        # Close button
+        close_btn = tk.Button(button_frame,
+                            text="❌ Cancel",
+                            command=dialog.destroy,
+                            font=('Segoe UI', 12),
+                            bg='#6b7280',
+                            fg='white',
+                            activebackground='#4b5563',
+                            relief='raised',
+                            bd=3,
+                            padx=20,
+                            pady=8)
+        close_btn.pack(side='right')
+
+    def show_purchase_options(self):
+        """Show purchase options dialog with multiple ways to buy"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Purchase ClassFlow Premium")
+        dialog.geometry("600x700")
+        dialog.resizable(False, False)
+        dialog.configure(bg='#ffffff')
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        # Header
+        header_frame = tk.Frame(dialog, bg='#3b82f6', height=80)
+        header_frame.pack(fill='x')
+        header_frame.pack_propagate(False)
+        
+        header_label = tk.Label(header_frame, 
+                              text="💰 Purchase ClassFlow Premium", 
+                              font=("Segoe UI", 18, "bold"),
+                              bg='#3b82f6', 
+                              fg='white')
+        header_label.pack(expand=True)
+        
+        # Content with scroll
+        content_frame = tk.Frame(dialog, bg='#ffffff')
+        content_frame.pack(fill='both', expand=True, padx=30, pady=20)
+        
+        # Pricing plans
+        plans_frame = tk.Frame(content_frame, bg='#ffffff')
+        plans_frame.pack(fill='x', pady=(0, 20))
+        
+        # School Plan
+        school_plan = tk.Frame(plans_frame, bg='#f0f9ff', relief='ridge', bd=2)
+        school_plan.pack(fill='x', pady=10)
+        
+        tk.Label(school_plan, 
+                text="🏫 School Plan - ₹499/month", 
+                font=("Segoe UI", 16, "bold"),
+                bg='#f0f9ff',
+                fg='#1e40af').pack(pady=10)
+        
+        tk.Label(school_plan, 
+                text="Perfect for most schools • All premium features included", 
+                font=("Segoe UI", 11),
+                bg='#f0f9ff',
+                fg='#374151').pack(pady=(0, 10))
+        
+        # Institution Plan
+        institution_plan = tk.Frame(plans_frame, bg='#fef3c7', relief='ridge', bd=2)
+        institution_plan.pack(fill='x', pady=10)
+        
+        tk.Label(institution_plan, 
+                text="🏢 Institution Plan - ₹999/month", 
+                font=("Segoe UI", 16, "bold"),
+                bg='#fef3c7',
+                fg='#92400e').pack(pady=10)
+        
+        tk.Label(institution_plan, 
+                text="For large institutions • Priority support • Custom branding", 
+                font=("Segoe UI", 11),
+                bg='#fef3c7',
+                fg='#374151').pack(pady=(0, 10))
+        
+        # Purchase options
+        options_label = tk.Label(content_frame, 
+                               text="How to Purchase:", 
+                               font=("Segoe UI", 14, "bold"),
+                               bg='#ffffff')
+        options_label.pack(anchor='w', pady=(20, 10))
+        
+        # Option 1: Online Payment
+        option1_frame = tk.Frame(content_frame, bg='#f9fafb', relief='ridge', bd=1)
+        option1_frame.pack(fill='x', pady=5)
+        
+        tk.Label(option1_frame, 
+                text="💳 Option 1: Online Payment (Recommended)", 
+                font=("Segoe UI", 12, "bold"),
+                bg='#f9fafb',
+                fg='#059669').pack(anchor='w', padx=15, pady=5)
+        
+        tk.Label(option1_frame, 
+                text="• Pay securely online with Razorpay/PayTM\n• Instant license key delivery\n• Support for UPI, Credit/Debit cards, Net banking", 
+                font=("Segoe UI", 10),
+                bg='#f9fafb',
+                fg='#4b5563',
+                justify='left').pack(anchor='w', padx=30, pady=(0, 10))
+        
+        def open_payment_portal():
+            import webbrowser
+            webbrowser.open("https://prashant-11.github.io/TimeTablePlanner/#pricing")
+            messagebox.showinfo("Payment Portal", "Opening payment portal in your browser...")
+        
+        payment_btn = tk.Button(option1_frame,
+                              text="🌐 Open Payment Portal",
+                              command=open_payment_portal,
+                              font=('Segoe UI', 11, 'bold'),
+                              bg='#059669',
+                              fg='white',
+                              activebackground='#047857',
+                              relief='raised',
+                              bd=2,
+                              padx=20,
+                              pady=5)
+        payment_btn.pack(anchor='w', padx=30, pady=(0, 15))
+        
+        # Option 2: Direct Contact
+        option2_frame = tk.Frame(content_frame, bg='#f9fafb', relief='ridge', bd=1)
+        option2_frame.pack(fill='x', pady=5)
+        
+        tk.Label(option2_frame, 
+                text="📞 Option 2: Direct Contact", 
+                font=("Segoe UI", 12, "bold"),
+                bg='#f9fafb',
+                fg='#3b82f6').pack(anchor='w', padx=15, pady=5)
+        
+        contact_text = ("📧 Email: prashant.compsc@gmail.com\n" +
+                       "🌐 Website: www.classflow.ai\n" +
+                       "📱 WhatsApp: +91-XXXX-XXXX-XX\n" +
+                       "• Bulk discounts available\n" +
+                       "• Custom quotes for large institutions")
+        
+        tk.Label(option2_frame, 
+                text=contact_text, 
+                font=("Segoe UI", 10),
+                bg='#f9fafb',
+                fg='#4b5563',
+                justify='left').pack(anchor='w', padx=30, pady=(0, 15))
+        
+        # Close button
+        close_btn = tk.Button(content_frame,
+                            text="✅ Close",
+                            command=dialog.destroy,
+                            font=('Segoe UI', 12),
+                            bg='#6b7280',
+                            fg='white',
+                            activebackground='#4b5563',
+                            relief='raised',
+                            bd=3,
+                            padx=30,
+                            pady=8)
+        close_btn.pack(pady=20)
+
+    def show_license_details(self):
+        """Show current license details for premium users"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("License Details")
+        dialog.geometry("400x300")
+        dialog.resizable(False, False)
+        dialog.configure(bg='#ffffff')
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        # Header
+        header_frame = tk.Frame(dialog, bg='#10b981', height=60)
+        header_frame.pack(fill='x')
+        header_frame.pack_propagate(False)
+        
+        header_label = tk.Label(header_frame, 
+                              text="💎 License Details", 
+                              font=("Segoe UI", 16, "bold"),
+                              bg='#10b981', 
+                              fg='white')
+        header_label.pack(expand=True)
+        
+        # Content
+        content_frame = tk.Frame(dialog, bg='#ffffff')
+        content_frame.pack(fill='both', expand=True, padx=30, pady=20)
+        
+        # License info
+        info_text = f"License Type: {self.license_manager.get_license_status()}\n"
+        info_text += f"Status: Active ✅\n"
+        info_text += f"Features: All Premium Features Unlocked\n"
+        info_text += f"Support: Priority Email Support"
+        
+        info_label = tk.Label(content_frame,
+                            text=info_text,
+                            font=("Segoe UI", 11),
+                            bg='#ffffff',
+                            fg='#374151',
+                            justify='left')
+        info_label.pack(pady=20)
+        
+        # Close button
+        close_btn = tk.Button(content_frame,
+                            text="✅ Close",
+                            command=dialog.destroy,
+                            font=('Segoe UI', 12),
+                            bg='#10b981',
+                            fg='white',
+                            activebackground='#059669',
+                            relief='raised',
+                            bd=3,
+                            padx=30,
+                            pady=8)
+        close_btn.pack(pady=20)
+
+    def show_free_limits(self):
+        """Show free version limitations"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Free Version Limits")
+        dialog.geometry("500x400")
+        dialog.resizable(False, False)
+        dialog.configure(bg='#ffffff')
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        # Header
+        header_frame = tk.Frame(dialog, bg='#f59e0b', height=60)
+        header_frame.pack(fill='x')
+        header_frame.pack_propagate(False)
+        
+        header_label = tk.Label(header_frame, 
+                              text="📋 Free Version Limits", 
+                              font=("Segoe UI", 16, "bold"),
+                              bg='#f59e0b', 
+                              fg='white')
+        header_label.pack(expand=True)
+        
+        # Content
+        content_frame = tk.Frame(dialog, bg='#ffffff')
+        content_frame.pack(fill='both', expand=True, padx=30, pady=20)
+        
+        # Limits
+        limits_text = ("FREE Version Limitations:\n\n" +
+                      "📚 Classes: Maximum 3\n" +
+                      "📝 Sections: Maximum 2 per class\n" +
+                      "👨‍🏫 Teachers: Maximum 10\n" +
+                      "⏰ Periods: Maximum 6 per day\n\n" +
+                      "🚫 Disabled Features:\n" +
+                      "• Auto-Assign Algorithm\n" +
+                      "• Smart Conflict Detection\n" +
+                      "• Teacher Restrictions\n" +
+                      "• Advanced Export Options\n\n" +
+                      "💎 Upgrade to Premium for unlimited access!")
+        
+        limits_label = tk.Label(content_frame,
+                              text=limits_text,
+                              font=("Segoe UI", 11),
+                              bg='#ffffff',
+                              fg='#374151',
+                              justify='left')
+        limits_label.pack(pady=10)
+        
+        # Upgrade button
+        upgrade_btn = tk.Button(content_frame,
+                              text="🚀 Upgrade Now",
+                              command=lambda: [dialog.destroy(), self.show_upgrade_dialog()],
+                              font=('Segoe UI', 12, 'bold'),
+                              bg='#059669',
+                              fg='white',
+                              activebackground='#047857',
+                              relief='raised',
+                              bd=3,
+                              padx=25,
+                              pady=8)
+        upgrade_btn.pack(pady=10)
+        
+        # Close button
+        close_btn = tk.Button(content_frame,
+                            text="✅ Close",
+                            command=dialog.destroy,
+                            font=('Segoe UI', 12),
+                            bg='#6b7280',
+                            fg='white',
+                            activebackground='#4b5563',
+                            relief='raised',
+                            bd=3,
+                            padx=20,
+                            pady=8)
+        close_btn.pack(pady=5)
+
+    def show_user_guide(self):
+        """Show user guide dialog"""
+        messagebox.showinfo("User Guide", 
+                          "User Guide will open in your browser.\n\n" +
+                          "Visit: https://prashant-11.github.io/TimeTablePlanner/\n" +
+                          "Or check the documentation included with the application.")
+
+    def contact_support(self):
+        """Show support contact information"""
+        messagebox.showinfo("Contact Support", 
+                          "📧 Email: prashant.compsc@gmail.com\n" +
+                          "🌐 Website: www.classflow.ai\n" +
+                          "📱 Phone: +91-XXXX-XXXX-XX\n\n" +
+                          "For technical support, please include:\n" +
+                          "• Your license type\n" +
+                          "• Detailed description of the issue\n" +
+                          "• Screenshots if applicable")
+
+    def open_website(self):
+        """Open ClassFlow website"""
+        import webbrowser
+        webbrowser.open("https://prashant-11.github.io/TimeTablePlanner/")
+        messagebox.showinfo("Website", "Opening ClassFlow website in your browser...")
+
+    def show_about(self):
+        """Show about dialog"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("About ClassFlow")
+        dialog.geometry("400x350")
+        dialog.resizable(False, False)
+        dialog.configure(bg='#ffffff')
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        # Header
+        header_frame = tk.Frame(dialog, bg='#1e3a8a', height=60)
+        header_frame.pack(fill='x')
+        header_frame.pack_propagate(False)
+        
+        header_label = tk.Label(header_frame, 
+                              text="🎓 About ClassFlow", 
+                              font=("Segoe UI", 16, "bold"),
+                              bg='#1e3a8a', 
+                              fg='white')
+        header_label.pack(expand=True)
+        
+        # Content
+        content_frame = tk.Frame(dialog, bg='#ffffff')
+        content_frame.pack(fill='both', expand=True, padx=30, pady=20)
+        
+        about_text = ("ClassFlow v2.0\n" +
+                     "Smart Timetable Management System\n\n" +
+                     "Developed by: Hypersync\n" +
+                     "AI-based Education Startup\n\n" +
+                     "Contact: prashant.compsc@gmail.com\n" +
+                     "Website: www.classflow.ai\n" +
+                     "GitHub: github.com/Prashant-11\n\n" +
+                     "© 2025 Hypersync. All rights reserved.")
+        
+        about_label = tk.Label(content_frame,
+                             text=about_text,
+                             font=("Segoe UI", 11),
+                             bg='#ffffff',
+                             fg='#374151',
+                             justify='center')
+        about_label.pack(pady=20)
+        
+        # Close button
+        close_btn = tk.Button(content_frame,
+                            text="✅ Close",
+                            command=dialog.destroy,
+                            font=('Segoe UI', 12),
+                            bg='#1e3a8a',
+                            fg='white',
+                            activebackground='#1e40af',
+                            relief='raised',
+                            bd=3,
+                            padx=30,
+                            pady=8)
+        close_btn.pack(pady=10)
+
+    def update_title(self):
+        """Update window title based on license status"""
+        base_title = "ClassFlow v2.0"
+        
+        if self.license_manager.is_premium():
+            title = f"{base_title} - Premium License"
+        elif self.license_manager.is_trial_active():
+            days_left = self.license_manager.get_trial_days_remaining()
+            title = f"{base_title} - Trial: {days_left} days remaining"
+        else:
+            title = f"{base_title} - Free Version"
+        
+        self.root.title(title)
+
+    def update_status_bar(self):
+        """Update status bar with current license and feature information"""
+        status_text = f"License: {self.license_manager.get_license_status()}"
+        
+        if not self.license_manager.is_premium():
+            teachers_count = len(self.config.get('teachers', []))
+            max_teachers = self.license_manager.get_feature_limit('max_teachers')
+            status_text += f" | Teachers: {teachers_count}/{max_teachers}"
+        
+        self.status_bar.config(text=status_text)
 
     def _on_frame_configure(self, event):
         """Reset the scroll region to encompass the inner frame"""
@@ -1374,12 +1820,6 @@ class TimetableApp:
                     c.setFont("Helvetica", 9)
                     y = height - 40
             
-            # Add Hypersync footer at bottom of page
-            c.setFont("Helvetica", 8)
-            footer_text = "Hypersync - An AI based education startup"
-            footer_width = c.stringWidth(footer_text, "Helvetica", 8)
-            c.drawString((width - footer_width) / 2, 30, footer_text)
-            
             c.save()
             messagebox.showinfo("Success", f"PDF exported successfully to:\n{file}")
             
@@ -1440,79 +1880,21 @@ class TimetableApp:
                         frame.grid(row=row, column=col, sticky='nsew')
                         subj_var = tk.StringVar()
                         teacher_var = tk.StringVar()
-                        
-                        # Subject dropdown with blank option
-                        subject_values = [""] + self.config['subjects']  # Add blank option
-                        subj_cb = ttk.Combobox(frame, textvariable=subj_var, values=subject_values, width=8, name=f"subj_{cell_key}")
+                        subj_cb = ttk.Combobox(frame, textvariable=subj_var, values=self.config['subjects'], width=8, state='readonly')
                         subj_cb.pack(side='top', fill='x', padx=1, pady=1)
                         
-                        # Teacher dropdown - initially with all teachers, will be filtered by subject
-                        # Filter initial teacher values by class-section restrictions
-                        allowed_teachers = self.filter_teachers_by_restrictions(self.config['teachers'], class_, section)
-                        teacher_values = [""] + allowed_teachers  # Add blank option
-                        teacher_cb = ttk.Combobox(frame, textvariable=teacher_var, values=teacher_values, width=12, name=f"teacher_{cell_key}")
+                        # Make teacher names editable with dropdown
+                        teacher_cb = ttk.Combobox(frame, textvariable=teacher_var, values=self.config['teachers'], width=12)
                         teacher_cb.pack(side='top', fill='x', padx=1, pady=(0,2))
                         
                         self.entries[cell_key] = (subj_var, teacher_var)
                         self.teacher_cbs[cell_key] = teacher_cb
                         self.cell_frames[cell_key] = frame
-                        
-                        def on_subject_change(event=None, key=cell_key, t_cb=teacher_cb, t_var=teacher_var):
-                            """Update teacher dropdown based on selected subject"""
-                            selected_subject = subj_var.get()
-                            current_teacher = t_var.get()
-                            
-                            if selected_subject and selected_subject != "":
-                                # Get teachers who can teach this subject
-                                teacher_subjects = self.config.get('teacher_subjects', {})
-                                if teacher_subjects:
-                                    available_teachers = [teacher for teacher, subjects in teacher_subjects.items() 
-                                                        if selected_subject in subjects]
-                                else:
-                                    # If no mapping exists, show all teachers
-                                    available_teachers = self.config['teachers']
-                                
-                                # Further filter by class-section restrictions
-                                available_teachers = self.filter_teachers_by_restrictions(
-                                    available_teachers, class_, section
-                                )
-                                
-                                # Update teacher dropdown with filtered teachers
-                                filtered_values = [""] + available_teachers
-                                t_cb['values'] = filtered_values
-                                
-                                # Only clear teacher selection if current teacher can't teach this subject
-                                # BUT preserve blank entries and manual entries
-                                if current_teacher and current_teacher != "" and current_teacher not in available_teachers:
-                                    # Check if it's a custom/manual entry not in the original teacher list
-                                    if current_teacher not in self.config['teachers']:
-                                        # Keep custom entries as they might be substitutes or special assignments
-                                        pass
-                                    else:
-                                        # Only clear if it's a standard teacher who can't teach this subject
-                                        t_var.set("")
-                            else:
-                                # If no subject selected, show teachers allowed for this class-section
-                                all_allowed_teachers = self.filter_teachers_by_restrictions(
-                                    self.config['teachers'], class_, section
-                                )
-                                t_cb['values'] = [""] + all_allowed_teachers
-                            
-                            # Auto-save when subject is changed
-                            self.auto_save_changes()
-                        
                         def on_teacher_change(event=None, key=cell_key):
                             self.resolved_cells.add(key)
                             self.impacted_cells.discard(key)
                             if key in self.cell_frames:
                                 self.cell_frames[key].configure(style='GreenCell.TFrame')
-                            
-                            # Auto-save when teacher is changed  
-                            self.auto_save_changes()
-                        
-                        # Bind events
-                        subj_cb.bind('<<ComboboxSelected>>', on_subject_change)
-                        subj_cb.bind('<KeyRelease>', on_subject_change)  # For manual typing
                         teacher_cb.bind('<FocusOut>', on_teacher_change)
                         teacher_cb.bind('<Return>', on_teacher_change)
                         teacher_cb.bind('<<ComboboxSelected>>', on_teacher_change)
@@ -1520,19 +1902,7 @@ class TimetableApp:
                 row += 1
 
     def refresh_grid(self):
-        """Refresh the timetable grid - rebuilds if periods changed"""
-        # Check if periods per day has changed
-        config_periods = self.config.get('periods_per_day', 7)
-        if hasattr(self, 'periods') and self.periods != config_periods:
-            # Periods changed - need to rebuild the entire grid
-            self.periods = config_periods
-            self.rebuild_grid()
-        else:
-            # Just refresh display
-            self.update_display()
-    
-    def update_display(self):
-        """Update the display and scrollbars without rebuilding"""
+        # Update the display and scrollbars
         self.grid_frame.update_idletasks()
         self.grid_canvas.configure(scrollregion=self.grid_canvas.bbox("all"))
         
@@ -1547,21 +1917,8 @@ class TimetableApp:
             self.grid_canvas.itemconfig(self.canvas_frame, 
                                        width=max(frame_width, canvas_width),
                                        height=max(frame_height, canvas_height))
-    
-    def rebuild_grid(self):
-        """Completely rebuild the timetable grid with new structure"""
-        try:
-            # Rebuild the grid with new periods count
-            self.draw_grid()
-            
-            # Load existing data
-            self.load_data()
-            
-            # Update display
-            self.update_display()
-            
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to rebuild grid: {str(e)}")
+        if frame_height > canvas_height:
+            self.grid_canvas.itemconfig(self.canvas_frame, height=frame_height)
 
     def mark_leave(self):
         dialog = tk.Toplevel(self.root)
@@ -1621,33 +1978,23 @@ class TimetableApp:
                 impact_text.insert(tk.END, "⚠️  Please select both teacher and day to see impact analysis.")
                 impact_text.configure(fg='orange')
                 self.current_impacted_periods = []
-                # Reset substitute dropdown to all teachers
-                substitute_cb['values'] = ['[Leave Blank]'] + self.config['teachers']
                 return
             
             # Find all periods where this teacher is assigned on this day
             impacted_periods = []
-            required_subjects = set()
             for (class_, section, d, period), (subj_var, teacher_var_entry) in self.entries.items():
                 if d == day and teacher_var_entry.get().strip().lower() == teacher.strip().lower():
-                    subject = subj_var.get()
-                    if subject:
-                        required_subjects.add(subject)
                     impacted_periods.append({
                         'class': class_,
                         'section': section,
                         'day': d,
                         'period': period,
                         'period_num': period + 1,
-                        'subject': subject,
+                        'subject': subj_var.get(),
                         'key': (class_, section, d, period)
                     })
             
             self.current_impacted_periods = impacted_periods
-            
-            # Update substitute teacher dropdown - include all teachers for maximum flexibility
-            # Don't filter by subject mapping in leave management to allow for emergency assignments
-            substitute_cb['values'] = ['[Leave Blank]'] + [t for t in self.config['teachers'] if t != teacher]
             
             # Display impact analysis
             impact_text.delete(1.0, tk.END)
@@ -1658,10 +2005,8 @@ class TimetableApp:
                 impact_text.insert(tk.END, "="*50 + "\n\n")
                 impact_text.insert(tk.END, f"👨‍🏫 Teacher: {teacher}\n")
                 impact_text.insert(tk.END, f"📅 Day: {day}\n")
-                impact_text.insert(tk.END, f"⚠️  Total Periods Affected: {len(impacted_periods)}\n")
-                if required_subjects:
-                    impact_text.insert(tk.END, f"📚 Subjects to Cover: {', '.join(sorted(required_subjects))}\n")
-                impact_text.insert(tk.END, "\n📋 AFFECTED PERIODS:\n")
+                impact_text.insert(tk.END, f"⚠️  Total Periods Affected: {len(impacted_periods)}\n\n")
+                impact_text.insert(tk.END, "📋 AFFECTED PERIODS:\n")
                 impact_text.insert(tk.END, "-" * 40 + "\n")
                 
                 for i, period_info in enumerate(impacted_periods, 1):
@@ -1754,14 +2099,6 @@ class TimetableApp:
                   style='Accent.TButton').pack(side='left', padx=10)
         ttk.Button(button_frame, text="❌ Cancel", command=dialog.destroy).pack(side='right', padx=5)
         
-        # Add Hypersync footer
-        footer_frame = ttk.Frame(main_frame)
-        footer_frame.pack(fill='x', pady=(10, 0))
-        
-        footer_label = ttk.Label(footer_frame, text="Hypersync - An AI based education startup", 
-                                font=("Segoe UI", 9), foreground="#666666")
-        footer_label.pack(anchor='center')
-        
         # Configure grid weights for responsive design
         selection_frame.columnconfigure(1, weight=1)
         impact_frame.columnconfigure(0, weight=1)
@@ -1771,98 +2108,7 @@ class TimetableApp:
         teacher_cb.focus_set()
         dialog.after(100, analyze_and_show_impact)
 
-    def auto_save_restriction(self, teacher, class_name, section, var):
-        """Auto-save individual teacher restriction changes"""
-        try:
-            # Remove existing restriction for this combination
-            self.c.execute("DELETE FROM teacher_restrictions WHERE teacher=? AND class=? AND section=?", 
-                          (teacher, class_name, section))
-            
-            # Add restriction if checkbox is checked
-            if var.get():
-                self.c.execute("INSERT INTO teacher_restrictions (teacher, class, section) VALUES (?, ?, ?)",
-                              (teacher, class_name, section))
-            
-            self.conn.commit()
-            
-            # Update UI feedback
-            restriction_count = self.c.execute("SELECT COUNT(*) FROM teacher_restrictions WHERE teacher=?", (teacher,)).fetchone()[0]
-            total_restrictions = self.c.execute("SELECT COUNT(*) FROM teacher_restrictions").fetchone()[0]
-            
-            # Show subtle feedback (could add status label if needed)
-            print(f"Auto-saved: {teacher} restriction for {class_name}-{section} ({'added' if var.get() else 'removed'})")
-            print(f"Teacher {teacher} now has {restriction_count} restrictions, total: {total_restrictions}")
-            
-            # Refresh teacher dropdowns to reflect changes
-            self.refresh_teacher_dropdowns()
-            
-        except Exception as e:
-            print(f"Auto-save restriction error: {e}")
-    
-    def auto_save_changes(self):
-        """Auto-save changes with a small delay to avoid excessive saves"""
-        if hasattr(self, '_save_timer'):
-            self.root.after_cancel(self._save_timer)
-        
-        # Save after 2 seconds of inactivity
-        self._save_timer = self.root.after(2000, self._perform_auto_save)
-    
-    def _perform_auto_save(self):
-        """Perform the actual auto-save"""
-        try:
-            year = self.selected_year.get()
-            week = self.selected_week.get()
-            
-            # Clear old data for this week
-            self.c.execute("DELETE FROM timetable WHERE year=? AND week=?", (year, week))
-            
-            # Save current grid - only cells with both subject and teacher
-            saved_count = 0
-            for (class_, section, day, period), (subj_var, teacher_var) in self.entries.items():
-                subject = subj_var.get().strip()
-                teacher = teacher_var.get().strip()
-                if subject and teacher:  # Only save filled cells
-                    self.c.execute('''
-                        INSERT INTO timetable (year, week, class, section, day, period, subject, teacher)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (year, week, class_, section, day, period, subject, teacher))
-                    saved_count += 1
-                    
-            self.conn.commit()
-            
-            # Update prominent save panel indicators
-            current_time = datetime.now().strftime("%I:%M %p")
-            
-            if hasattr(self, 'auto_save_indicator'):
-                self.auto_save_indicator.config(text=f"✅ AUTO-SAVED: {saved_count} entries", fg="#90EE90")
-                # Reset after 4 seconds
-                self.root.after(4000, lambda: self.auto_save_indicator.config(text="🔄 AUTO-SAVE: ENABLED", fg="#90EE90"))
-            
-            if hasattr(self, 'save_status_display'):
-                self.save_status_display.config(text=f"📊 Last auto-save: {saved_count} entries at {current_time}")
-            
-            if hasattr(self, 'save_count_label'):
-                self.save_count_label.config(text=f"📊 Entries: {saved_count} saved")
-            
-            if hasattr(self, 'last_save_label'):
-                self.last_save_label.config(text=f"⏰ Auto-saved: {current_time}")
-            
-            # Update status label if exists (old one)
-            if hasattr(self, 'save_status_label'):
-                self.save_status_label.config(text=f"✅ Auto-Saved: {saved_count} entries", foreground="green")
-                # Reset status after 3 seconds
-                self.root.after(3000, lambda: self.save_status_label.config(text="🔄 Auto-Save: ON", foreground="green"))
-            
-            self.root.title(f"ClassFlow v1.3 - Auto-saved {saved_count} entries ✓")
-            
-            # Reset title after 3 seconds
-            self.root.after(3000, lambda: self.root.title("ClassFlow v1.3"))
-            
-        except Exception as e:
-            print(f"Auto-save error: {e}")
-    
     def save_timetable(self):
-        """Manual save with confirmation"""
         year = self.selected_year.get()
         week = self.selected_week.get()
         
@@ -1870,40 +2116,15 @@ class TimetableApp:
         self.c.execute("DELETE FROM timetable WHERE year=? AND week=?", (year, week))
         
         # Save current grid
-        saved_count = 0
         for (class_, section, day, period), (subj_var, teacher_var) in self.entries.items():
-            subject = subj_var.get().strip()
-            teacher = teacher_var.get().strip()
-            if subject and teacher:  # Only save filled cells
+            if subj_var.get() and teacher_var.get():  # Only save filled cells
                 self.c.execute('''
                     INSERT INTO timetable (year, week, class, section, day, period, subject, teacher)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (year, week, class_, section, day, period, subject, teacher))
-                saved_count += 1
+                ''', (year, week, class_, section, day, period, subj_var.get(), teacher_var.get()))
                 
         self.conn.commit()
-        
-        # Update prominent save panel indicators
-        current_time = datetime.now().strftime("%I:%M %p")
-        
-        if hasattr(self, 'auto_save_indicator'):
-            self.auto_save_indicator.config(text=f"💾 MANUAL SAVE: {saved_count} entries", fg="#FFD700")
-            # Reset after 6 seconds
-            self.root.after(6000, lambda: self.auto_save_indicator.config(text="🔄 AUTO-SAVE: ENABLED", fg="#90EE90"))
-        
-        if hasattr(self, 'save_status_display'):
-            self.save_status_display.config(text=f"📊 Manual save: {saved_count} entries at {current_time}")
-        
-        if hasattr(self, 'last_save_label'):
-            self.last_save_label.config(text=f"⏰ Manual save: {current_time}")
-        
-        # Update status label if exists (old one)
-        if hasattr(self, 'save_status_label'):
-            self.save_status_label.config(text=f"💾 Manual Save: {saved_count} entries", foreground="blue")
-            # Reset status after 5 seconds
-            self.root.after(5000, lambda: self.save_status_label.config(text="🔄 Auto-Save: ON", foreground="green"))
-        
-        messagebox.showinfo("Manual Save", f"Timetable manually saved!\n\n✅ {saved_count} entries saved for Year {year}, Week {week}\n\n💡 Note: Changes are also auto-saved as you work")
+        messagebox.showinfo("Success", "Timetable saved")
 
     def load_timetable(self):
         year = self.selected_year.get()
@@ -1933,23 +2154,6 @@ class TimetableApp:
                 if key in self.entries:
                     self.entries[key][0].set(subject or '')
                     self.entries[key][1].set(teacher or '')
-                    
-                    # Update teacher dropdown based on loaded subject
-                    if key in self.teacher_cbs and subject:
-                        teacher_cb = self.teacher_cbs[key]
-                        teacher_subjects = self.config.get('teacher_subjects', {})
-                        if teacher_subjects:
-                            available_teachers = [t for t, subjs in teacher_subjects.items() if subject in subjs]
-                        else:
-                            available_teachers = self.config['teachers']
-                        
-                        # Further filter by class-section restrictions
-                        available_teachers = self.filter_teachers_by_restrictions(
-                            available_teachers, class_, section
-                        )
-                        
-                        teacher_cb['values'] = [""] + available_teachers
-                    
                     rows_loaded += 1
             
             if rows_loaded > 0:
@@ -1961,40 +2165,195 @@ class TimetableApp:
             messagebox.showerror("Load Error", f"Failed to load timetable:\n{str(e)}")
             print(f"Load error: {e}")
 
-    def refresh_teacher_dropdowns(self):
-        """Refresh all teacher dropdowns to respect current restrictions"""
-        if not hasattr(self, 'entries') or not self.entries:
+    def edit_restrictions(self):
+        """Open the teacher restrictions management dialog"""
+        # Check license for premium feature
+        if not self.license_manager.can_use_feature("teacher_restrictions"):
+            if self.license_manager.is_trial_expired():
+                response = messagebox.askyesno("Premium Feature", 
+                    "Teacher Restrictions is a premium feature. Your trial has expired.\n\n" +
+                    "Would you like to upgrade to Premium to access this feature?")
+                if response:
+                    self.show_upgrade_dialog()
+            else:
+                messagebox.showinfo("Premium Feature", 
+                    "Teacher Restrictions is not available in your current license. Please upgrade to access this feature.")
             return
-            
-        teacher_subjects = self.config.get('teacher_subjects', {})
         
-        for cell_key in self.entries:
-            class_, section, day, period = cell_key
-            if cell_key in self.teacher_cbs:
-                teacher_cb = self.teacher_cbs[cell_key]
-                subj_var, teacher_var = self.entries[cell_key]
-                current_subject = subj_var.get()
-                
-                if current_subject and current_subject != "":
-                    # Filter by subject first
-                    if teacher_subjects:
-                        available_teachers = [teacher for teacher, subjects in teacher_subjects.items() 
-                                            if current_subject in subjects]
-                    else:
-                        available_teachers = self.config['teachers']
-                else:
-                    # No subject selected, show all teachers for this class-section
-                    available_teachers = self.config['teachers']
-                
-                # Filter by class-section restrictions
-                available_teachers = self.filter_teachers_by_restrictions(
-                    available_teachers, class_, section
-                )
-                
-                # Update dropdown
-                teacher_cb['values'] = [""] + available_teachers
-    
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Teacher Restrictions Management")
+        dialog.geometry("700x600")
+        dialog.resizable(True, True)
+        dialog.configure(bg='#ffffff')
+        
+        # Center the dialog
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        # Header
+        header_frame = tk.Frame(dialog, bg='#8b5cf6', height=70)
+        header_frame.pack(fill='x')
+        header_frame.pack_propagate(False)
+        
+        header_label = tk.Label(header_frame, 
+                              text="🔒 Teacher Restrictions Management", 
+                              font=("Segoe UI", 18, "bold"),
+                              bg='#8b5cf6', 
+                              fg='white')
+        header_label.pack(expand=True)
+        
+        # Content frame with scrollable area
+        content_frame = tk.Frame(dialog, bg='#ffffff')
+        content_frame.pack(fill='both', expand=True, padx=20, pady=20)
+        
+        # Instructions
+        instructions = tk.Label(content_frame,
+                              text="Configure which teachers can teach in specific classes and sections.\n" +
+                                   "This helps enforce school policies and teacher specializations.",
+                              font=("Segoe UI", 11),
+                              bg='#ffffff',
+                              fg='#4b5563',
+                              justify='left')
+        instructions.pack(anchor='w', pady=(0, 20))
+        
+        # Create notebook for different restriction types
+        notebook = ttk.Notebook(content_frame)
+        notebook.pack(fill='both', expand=True)
+        
+        # Class-wise restrictions tab
+        class_frame = ttk.Frame(notebook)
+        notebook.add(class_frame, text="📚 Class Restrictions")
+        
+        # Section-wise restrictions tab
+        section_frame = ttk.Frame(notebook)
+        notebook.add(section_frame, text="📝 Section Restrictions")
+        
+        # Subject-wise restrictions tab
+        subject_frame = ttk.Frame(notebook)
+        notebook.add(subject_frame, text="📖 Subject Restrictions")
+        
+        # Class restrictions content
+        self._setup_class_restrictions(class_frame)
+        
+        # Section restrictions content
+        self._setup_section_restrictions(section_frame)
+        
+        # Subject restrictions content
+        self._setup_subject_restrictions(subject_frame)
+        
+        # Button frame
+        button_frame = tk.Frame(content_frame, bg='#ffffff')
+        button_frame.pack(fill='x', pady=(20, 0))
+        
+        def save_restrictions():
+            messagebox.showinfo("Success", "Teacher restrictions saved successfully!")
+            dialog.destroy()
+        
+        # Save button
+        save_btn = tk.Button(button_frame,
+                           text="💾 Save Restrictions",
+                           command=save_restrictions,
+                           font=('Segoe UI', 12, 'bold'),
+                           bg='#10b981',
+                           fg='white',
+                           activebackground='#059669',
+                           relief='raised',
+                           bd=3,
+                           padx=25,
+                           pady=8)
+        save_btn.pack(side='left')
+        
+        # Reset button
+        reset_btn = tk.Button(button_frame,
+                            text="🔄 Reset All",
+                            command=lambda: messagebox.showwarning("Reset", "This will reset all restrictions!"),
+                            font=('Segoe UI', 12),
+                            bg='#f59e0b',
+                            fg='white',
+                            activebackground='#d97706',
+                            relief='raised',
+                            bd=3,
+                            padx=20,
+                            pady=8)
+        reset_btn.pack(side='left', padx=10)
+        
+        # Close button
+        close_btn = tk.Button(button_frame,
+                            text="❌ Close",
+                            command=dialog.destroy,
+                            font=('Segoe UI', 12),
+                            bg='#6b7280',
+                            fg='white',
+                            activebackground='#4b5563',
+                            relief='raised',
+                            bd=3,
+                            padx=20,
+                            pady=8)
+        close_btn.pack(side='right')
+
+    def _setup_class_restrictions(self, parent):
+        """Setup the class restrictions tab content"""
+        # Scrollable frame
+        canvas = tk.Canvas(parent, bg='#ffffff')
+        scrollbar = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # Content
+        for i, class_name in enumerate(self.config['classes']):
+            class_frame = ttk.LabelFrame(scrollable_frame, text=f"Class {class_name}", padding=15)
+            class_frame.pack(fill='x', pady=10, padx=10)
+            
+            # Teachers for this class
+            teachers_frame = ttk.Frame(class_frame)
+            teachers_frame.pack(fill='x')
+            
+            ttk.Label(teachers_frame, text="Allowed Teachers:", font=('Segoe UI', 10, 'bold')).pack(anchor='w')
+            
+            # Checkbox for each teacher
+            for teacher in self.config['teachers']:
+                var = tk.BooleanVar(value=True)  # Default: all teachers allowed
+                cb = ttk.Checkbutton(teachers_frame, text=teacher, variable=var)
+                cb.pack(anchor='w', padx=20)
+        
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+    def _setup_section_restrictions(self, parent):
+        """Setup the section restrictions tab content"""
+        # Similar structure for sections
+        info_label = ttk.Label(parent, text="Section-wise teacher restrictions will be configured here.",
+                             font=('Segoe UI', 11))
+        info_label.pack(pady=50)
+
+    def _setup_subject_restrictions(self, parent):
+        """Setup the subject restrictions tab content"""
+        # Similar structure for subjects  
+        info_label = ttk.Label(parent, text="Subject-wise teacher restrictions will be configured here.",
+                             font=('Segoe UI', 11))
+        info_label.pack(pady=50)
+
     def auto_assign(self):
+        # Check license before allowing auto-assign
+        if not self.license_manager.can_use_feature("auto_assign"):
+            if self.license_manager.is_trial_expired():
+                response = messagebox.askyesno("Premium Feature", 
+                    "Auto-assign is a premium feature. Your trial has expired.\n\n" +
+                    "Would you like to upgrade to Premium to access this feature?")
+                if response:
+                    self.show_upgrade_dialog()
+            else:
+                messagebox.showinfo("Premium Feature", 
+                    "Auto-assign is not available in your current license. Please upgrade to access this feature.")
+            return
+        
         # Auto-assign both subjects and teachers for all periods
         teacher_subjects = self.config.get('teacher_subjects', {})
         subjects = self.config['subjects']
@@ -2028,45 +2387,18 @@ class TimetableApp:
                             subject = subjects[(period + idx_class + idx_section) % len(subjects)]
                             subj_var.set(subject)
                             
-                            # Update teacher dropdown for this subject
-                            if key in self.teacher_cbs:
-                                teacher_cb = self.teacher_cbs[key]
-                                # Filter teachers based on subject
-                                available_teachers_for_subject = [t for t in all_teachers if subject in teacher_subjects.get(t, [])]
-                                if not available_teachers_for_subject:
-                                    available_teachers_for_subject = all_teachers  # Fallback to all teachers
-                                
-                                # Further filter by class-section restrictions
-                                available_teachers_for_subject = self.filter_teachers_by_restrictions(
-                                    available_teachers_for_subject, class_, section
-                                )
-                                
-                                # Update dropdown values
-                                teacher_cb['values'] = [""] + available_teachers_for_subject
-                            
                             # Find available teacher for this subject not already used in this period
                             available_teachers = [t for t in all_teachers if subject in teacher_subjects.get(t, []) and t not in used_teachers]
                             
-                            # Further filter by class-section restrictions
-                            available_teachers = self.filter_teachers_by_restrictions(
-                                available_teachers, class_, section
-                            )
-                            
                             # If no mapped teacher available, use any available teacher
                             if not available_teachers:
-                                all_available_for_class = self.filter_teachers_by_restrictions(
-                                    [t for t in all_teachers if t not in used_teachers], class_, section
-                                )
-                                available_teachers = all_available_for_class
+                                available_teachers = [t for t in all_teachers if t not in used_teachers]
                             
                             # If still no teacher available, reuse teachers with better distribution
                             if not available_teachers:
-                                # Use teachers allowed for this class-section in round-robin fashion
-                                allowed_teachers = self.filter_teachers_by_restrictions(all_teachers, class_, section)
-                                if not allowed_teachers:
-                                    allowed_teachers = all_teachers  # Ultimate fallback
-                                teacher_index = class_section_index % len(allowed_teachers)
-                                assigned_teacher = allowed_teachers[teacher_index]
+                                # Use teacher in round-robin fashion based on class-section index
+                                teacher_index = class_section_index % len(all_teachers)
+                                assigned_teacher = all_teachers[teacher_index]
                             else:
                                 # Use first available teacher
                                 assigned_teacher = available_teachers[0]
@@ -2080,24 +2412,22 @@ class TimetableApp:
         # Update the display
         self.grid_frame.update_idletasks()
         self.grid_canvas.configure(scrollregion=self.grid_canvas.bbox("all"))
-        
-        # Check if teacher restrictions are active
-        self.c.execute("SELECT COUNT(*) FROM teacher_restrictions")
-        restriction_count = self.c.fetchone()[0]
-        
-        if restriction_count > 0:
-            messagebox.showinfo("Success", 
-                f"Auto-assign completed with Teacher Restrictions applied!\n\n"
-                f"✅ Filled {filled_count} out of {total_cells} timetable slots\n"
-                f"🔒 {restriction_count} teacher class-section restrictions respected\n"
-                f"📝 Only allowed teachers assigned to each class-section")
-        else:
-            messagebox.showinfo("Success", 
-                f"Auto-assign completed!\n\n"
-                f"✅ Filled {filled_count} out of {total_cells} timetable slots\n"
-                f"ℹ️ No teacher restrictions configured - all teachers available")
+        messagebox.showinfo("Success", f"Auto-assign completed!\nFilled {filled_count} out of {total_cells} timetable slots")
 
     def smart_match(self):
+        # Check license before allowing smart match
+        if not self.license_manager.can_use_feature("smart_match"):
+            if self.license_manager.is_trial_expired():
+                response = messagebox.askyesno("Premium Feature", 
+                    "Smart Match is a premium feature. Your trial has expired.\n\n" +
+                    "Would you like to upgrade to Premium to access this feature?")
+                if response:
+                    self.show_upgrade_dialog()
+            else:
+                messagebox.showinfo("Premium Feature", 
+                    "Smart Match is not available in your current license. Please upgrade to access this feature.")
+            return
+        
         # Validate that no teacher is assigned to more than one subject at the same time (case-insensitive)
         periods = self.config['periods_per_day']
         days = self.config['days']
@@ -2151,10 +2481,7 @@ class TimetableApp:
         pd = lazy_import_pandas()
         if pd is None:
             return
-        
-        # Check for watermark requirement
-        should_watermark = self.license_manager.validate_feature("watermark")
-        
+            
         file = filedialog.asksaveasfilename(
             defaultextension=".xlsx",
             filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")]
@@ -2165,23 +2492,6 @@ class TimetableApp:
         try:
             # Create Excel writer object
             with pd.ExcelWriter(file, engine='openpyxl') as writer:
-                # Add watermark sheet if required
-                if should_watermark:
-                    watermark_data = pd.DataFrame({
-                        'ClassFlow Free Version': [
-                            'Generated by ClassFlow Free Version',
-                            'Upgrade to Premium for advanced features:',
-                            '• Auto-Assign & Smart Match',
-                            '• Teacher Restrictions & Leave Management', 
-                            '• Clean exports without watermarks',
-                            '• Unlimited classes, sections, teachers',
-                            '',
-                            'Contact: sales@hypersync.ai',
-                            'Website: www.classflow.ai'
-                        ]
-                    })
-                    watermark_data.to_excel(writer, sheet_name='Upgrade to Premium', index=False)
-                
                 # Create a worksheet for each class
                 for class_ in self.config['classes']:
                     # Create timetable data for this class
@@ -2315,14 +2625,6 @@ class TimetableApp:
         button_frame = ttk.Frame(win)
         button_frame.pack(fill='x', padx=10, pady=(0, 10))
         
-        # Add Hypersync footer
-        footer_frame = ttk.Frame(win)
-        footer_frame.pack(fill='x', padx=10, pady=(5, 0))
-        
-        footer_label = ttk.Label(footer_frame, text="Hypersync - An AI based education startup", 
-                                font=("Segoe UI", 9), foreground="#666666")
-        footer_label.pack(anchor='center')
-        
         def save_and_close():
             # Update mapping from all teacher variables
             for teacher, var in teacher_vars.items():
@@ -2350,737 +2652,111 @@ class TimetableApp:
         # Focus on window
         win.focus_set()
         win.grab_set()  # Make window modal
-
-    def show_setup(self):
-        """Show comprehensive setup dialog for classes, sections, teachers, and periods"""
-        setup_win = tk.Toplevel(self.root)
-        setup_win.title("ClassFlow - Application Setup")
-        setup_win.geometry("800x700")
-        setup_win.resizable(True, True)
-        setup_win.configure(bg="#f8f9fa")
-        
-        # Make window modal and center it
-        setup_win.transient(self.root)
-        setup_win.grab_set()
-        
-        # Center the window
-        setup_win.update_idletasks()
-        x = (setup_win.winfo_screenwidth() // 2) - (800 // 2)
-        y = (setup_win.winfo_screenheight() // 2) - (700 // 2)
-        setup_win.geometry(f"800x700+{x}+{y}")
-        
-        # Main container
-        main_container = tk.Frame(setup_win, bg="#f8f9fa")
-        main_container.pack(fill='both', expand=True, padx=20, pady=20)
-        
-        # Header
-        header_frame = tk.Frame(main_container, bg="#2d6cdf", height=80)
-        header_frame.pack(fill='x', pady=(0, 20))
-        header_frame.pack_propagate(False)
-        
-        header_label = tk.Label(header_frame, 
-            text="⚙️ ClassFlow Application Setup", 
-            font=("Segoe UI", 18, "bold"),
-            foreground="white",
-            bg="#2d6cdf")
-        header_label.pack(expand=True, pady=20)
-        
-        # Create notebook for different setup categories
-        notebook = ttk.Notebook(main_container)
-        notebook.pack(fill='both', expand=True, pady=(0, 20))
-        
-        # Tab 1: Periods Configuration
-        periods_frame = tk.Frame(notebook, bg="#ffffff")
-        notebook.add(periods_frame, text="📅 Periods")
-        
-        periods_container = tk.Frame(periods_frame, bg="#ffffff")
-        periods_container.pack(fill='both', expand=True, padx=30, pady=30)
-        
-        # Periods setup
-        periods_title = tk.Label(periods_container, 
-            text="📅 Daily Periods Configuration",
-            font=("Segoe UI", 16, "bold"),
-            bg="#ffffff",
-            fg="#2d6cdf")
-        periods_title.pack(anchor='w', pady=(0, 20))
-        
-        periods_desc = tk.Label(periods_container,
-            text="Configure how many periods per day your school has:",
-            font=("Segoe UI", 11),
-            bg="#ffffff",
-            fg="#6c757d")
-        periods_desc.pack(anchor='w', pady=(0, 20))
-        
-        periods_input_frame = tk.Frame(periods_container, bg="#ffffff")
-        periods_input_frame.pack(fill='x', pady=(0, 20))
-        
-        tk.Label(periods_input_frame, 
-            text="Periods per Day:", 
-            font=("Segoe UI", 12, "bold"),
-            bg="#ffffff").pack(side='left', padx=(0, 10))
-        
-        periods_var = tk.IntVar(value=self.config.get('periods_per_day', 7))
-        periods_spinbox = tk.Spinbox(periods_input_frame, 
-            from_=4, to=12, 
-            textvariable=periods_var,
-            font=("Segoe UI", 12),
-            width=5)
-        periods_spinbox.pack(side='left')
-        
-        tk.Label(periods_input_frame, 
-            text="(Range: 4-12 periods)",
-            font=("Segoe UI", 10),
-            bg="#ffffff",
-            fg="#6c757d").pack(side='left', padx=(10, 0))
-        
-        # Warning about grid rebuild
-        warning_frame = tk.Frame(periods_container, bg="#fff3cd", relief="solid", borderwidth=1)
-        warning_frame.pack(fill='x', pady=20)
-        
-        warning_label = tk.Label(warning_frame,
-            text="⚠️ Changing periods will rebuild the timetable grid. Existing data will be preserved.",
-            font=("Segoe UI", 10, "bold"),
-            bg="#fff3cd",
-            fg="#856404",
-            padx=15,
-            pady=10)
-        warning_label.pack()
-        
-        # Tab 2: Classes & Sections
-        classes_frame = tk.Frame(notebook, bg="#ffffff")
-        notebook.add(classes_frame, text="🏫 Classes & Sections")
-        
-        classes_container = tk.Frame(classes_frame, bg="#ffffff")
-        classes_container.pack(fill='both', expand=True, padx=30, pady=30)
-        
-        # Classes section
-        classes_title = tk.Label(classes_container, 
-            text="🏫 Classes Configuration",
-            font=("Segoe UI", 16, "bold"),
-            bg="#ffffff",
-            fg="#2d6cdf")
-        classes_title.pack(anchor='w', pady=(0, 10))
-        
-        classes_desc = tk.Label(classes_container,
-            text="Current Classes: " + ", ".join(self.config['classes']),
-            font=("Segoe UI", 11),
-            bg="#ffffff",
-            fg="#495057",
-            wraplength=700)
-        classes_desc.pack(anchor='w', pady=(0, 20))
-        
-        # Sections section
-        sections_title = tk.Label(classes_container, 
-            text="📋 Sections Configuration",
-            font=("Segoe UI", 16, "bold"),
-            bg="#ffffff",
-            fg="#2d6cdf")
-        sections_title.pack(anchor='w', pady=(20, 10))
-        
-        sections_desc = tk.Label(classes_container,
-            text="Current Sections: " + ", ".join(self.config['sections']),
-            font=("Segoe UI", 11),
-            bg="#ffffff",
-            fg="#495057")
-        sections_desc.pack(anchor='w', pady=(0, 20))
-        
-        # Note about editing
-        note_frame = tk.Frame(classes_container, bg="#d1ecf1", relief="solid", borderwidth=1)
-        note_frame.pack(fill='x', pady=20)
-        
-        note_label = tk.Label(note_frame,
-            text="ℹ️ To modify classes and sections, please edit the config.json file directly and restart the application.",
-            font=("Segoe UI", 10),
-            bg="#d1ecf1",
-            fg="#0c5460",
-            padx=15,
-            pady=10,
-            wraplength=650)
-        note_label.pack()
-        
-        # Tab 3: Teachers
-        teachers_frame = tk.Frame(notebook, bg="#ffffff")
-        notebook.add(teachers_frame, text="👨‍🏫 Teachers")
-        
-        teachers_container = tk.Frame(teachers_frame, bg="#ffffff")
-        teachers_container.pack(fill='both', expand=True, padx=30, pady=30)
-        
-        teachers_title = tk.Label(teachers_container, 
-            text="👨‍🏫 Teachers Overview",
-            font=("Segoe UI", 16, "bold"),
-            bg="#ffffff",
-            fg="#2d6cdf")
-        teachers_title.pack(anchor='w', pady=(0, 20))
-        
-        # Teachers count
-        teacher_count = tk.Label(teachers_container,
-            text=f"Total Teachers: {len(self.config['teachers'])}",
-            font=("Segoe UI", 12, "bold"),
-            bg="#ffffff",
-            fg="#28a745")
-        teacher_count.pack(anchor='w', pady=(0, 10))
-        
-        # Create scrollable teacher list
-        teachers_scroll_frame = tk.Frame(teachers_container, bg="#ffffff")
-        teachers_scroll_frame.pack(fill='both', expand=True, pady=(0, 20))
-        
-        teachers_canvas = tk.Canvas(teachers_scroll_frame, bg="#f8f9fa", height=200)
-        teachers_scrollbar = ttk.Scrollbar(teachers_scroll_frame, orient="vertical", command=teachers_canvas.yview)
-        teachers_scrollable_frame = tk.Frame(teachers_canvas, bg="#f8f9fa")
-        
-        teachers_scrollable_frame.bind(
-            "<Configure>",
-            lambda e: teachers_canvas.configure(scrollregion=teachers_canvas.bbox("all"))
-        )
-        
-        teachers_canvas.create_window((0, 0), window=teachers_scrollable_frame, anchor="nw")
-        teachers_canvas.configure(yscrollcommand=teachers_scrollbar.set)
-        
-        # Display teachers in a grid
-        teacher_display = tk.Label(teachers_scrollable_frame,
-            text=", ".join(self.config['teachers']),
-            font=("Segoe UI", 10),
-            bg="#f8f9fa",
-            fg="#495057",
-            wraplength=650,
-            justify="left",
-            padx=15,
-            pady=15)
-        teacher_display.pack(fill='x')
-        
-        teachers_canvas.pack(side="left", fill="both", expand=True)
-        teachers_scrollbar.pack(side="right", fill="y")
-        
-        # Note about teacher editing
-        teacher_note_frame = tk.Frame(teachers_container, bg="#d1ecf1", relief="solid", borderwidth=1)
-        teacher_note_frame.pack(fill='x', pady=20)
-        
-        teacher_note_label = tk.Label(teacher_note_frame,
-            text="ℹ️ To modify the teacher list, please edit the config.json file directly and restart the application.",
-            font=("Segoe UI", 10),
-            bg="#d1ecf1",
-            fg="#0c5460",
-            padx=15,
-            pady=10)
-        teacher_note_label.pack()
-        
-        # Save and Close buttons
-        button_frame = tk.Frame(main_container, bg="#f8f9fa")
-        button_frame.pack(fill='x', pady=(10, 0))
-        
-        def save_setup():
-            """Save the setup changes"""
-            try:
-                new_periods = periods_var.get()
-                current_periods = self.config.get('periods_per_day', 7)
-                
-                if new_periods != current_periods:
-                    # Update config
-                    self.config['periods_per_day'] = new_periods
-                    
-                    # Save to file
-                    with open('config.json', 'w') as f:
-                        json.dump(self.config, f, indent=2)
-                    
-                    # Rebuild grid
-                    self.refresh_grid()
-                    
-                    messagebox.showinfo("Setup Saved", 
-                        f"✅ Setup configuration saved!\n\n"
-                        f"📅 Periods per day updated to: {new_periods}\n"
-                        f"🔄 Timetable grid has been rebuilt")
-                else:
-                    messagebox.showinfo("Setup", "No changes to save.")
-                
-                setup_win.destroy()
-                
-            except Exception as e:
-                messagebox.showerror("Error", f"Error saving setup: {str(e)}")
-        
-        def cancel_setup():
-            setup_win.destroy()
-        
-        # Save button
-        save_btn = tk.Button(button_frame, 
-                            text="💾 Save Changes",
-                            command=save_setup,
-                            bg="#28a745",
-                            fg="white",
-                            font=("Segoe UI", 12, "bold"),
-                            relief="flat",
-                            padx=20,
-                            pady=10,
-                            cursor="hand2")
-        save_btn.pack(side='right', padx=(10, 0))
-        
-        # Cancel button
-        cancel_btn = tk.Button(button_frame, 
-                              text="❌ Cancel",
-                              command=cancel_setup,
-                              bg="#6c757d",
-                              fg="white",
-                              font=("Segoe UI", 12, "bold"),
-                              relief="flat",
-                              padx=20,
-                              pady=10,
-                              cursor="hand2")
-        cancel_btn.pack(side='right', padx=(10, 0))
-        
-        # Bind keyboard shortcuts
-        setup_win.bind('<Return>', lambda e: save_setup())
-        setup_win.bind('<Escape>', lambda e: cancel_setup())
-        setup_win.bind('<Control-s>', lambda e: save_setup())
-        
-        # Focus
-        setup_win.focus_set()
-        setup_win.lift()
-        
-        # Protocol for window close
-        setup_win.protocol("WM_DELETE_WINDOW", cancel_setup)
-
-    def show_teacher_restrictions(self):
-        """Show a dialog to manage teacher class-section restrictions"""
-        win = tk.Toplevel(self.root)
-        win.title("ClassFlow - Teacher Class-Section Restrictions")
-        win.geometry("1000x750")
-        win.resizable(True, True)
-        win.configure(bg="#f8f9fa")
-        
-        # Make window modal and center it
-        win.transient(self.root)
-        win.grab_set()
-        
-        # Center the window
-        win.update_idletasks()
-        x = (win.winfo_screenwidth() // 2) - (1000 // 2)
-        y = (win.winfo_screenheight() // 2) - (750 // 2)
-        win.geometry(f"1000x750+{x}+{y}")
-        
-        # Main frame with better styling
-        main_frame = tk.Frame(win, bg="#f8f9fa")
-        main_frame.pack(fill='both', expand=True, padx=20, pady=20)
-        
-        # Title header with save button at top right
-        title_frame = tk.Frame(main_frame, bg="#2d6cdf", height=80)
-        title_frame.pack(fill='x', pady=(0, 20))
-        title_frame.pack_propagate(False)
-        
-        # Title on the left
-        title_label = tk.Label(title_frame, 
-            text="🎯 Teacher Class-Section Restrictions", 
-            font=("Segoe UI", 18, "bold"),
-            foreground="white",
-            bg="#2d6cdf")
-        title_label.pack(side='left', expand=True, pady=20, padx=20)
-        
-        # Save functions
-        def save_restrictions():
-            """Manual save function - mainly for user confidence and final confirmation"""
-            try:
-                # Count current restrictions to show in confirmation
-                self.c.execute("SELECT COUNT(*) FROM teacher_restrictions")
-                total_restrictions = self.c.fetchone()[0]
-                
-                # Since auto-save is working, this is mainly for user feedback
-                # Refresh teacher dropdowns to ensure consistency
-                self.refresh_teacher_dropdowns()
-                
-                win.destroy()
-                messagebox.showinfo("Teacher Restrictions Saved", 
-                    f"✅ Teacher Restrictions Confirmed!\n\n"
-                    f"📊 Total Restrictions: {total_restrictions} class-section combinations\n"
-                    f"🔄 Auto-save was active: All changes already saved automatically\n"
-                    f"🎯 Teacher dropdowns updated: Only allowed teachers shown in each cell\n\n"
-                    f"💡 Your restrictions are now active in the main timetable!")
-                
-            except Exception as e:
-                messagebox.showerror("Error", f"Error confirming restrictions: {str(e)}")
-        
-        def cancel():
-            """Cancel and close dialog"""
-            result = messagebox.askyesno("Close Teacher Restrictions", 
-                "Close Teacher Restrictions dialog?\n\n"
-                "✅ All changes have been auto-saved automatically\n"
-                "📝 No data will be lost")
-            if result:
-                win.destroy()
-        
-        # PROMINENT SAVE BUTTON - TOP RIGHT POSITION
-        save_btn = tk.Button(title_frame, 
-                            text="💾 SAVE & APPLY", 
-                            command=save_restrictions,
-                            font=("Segoe UI", 12, "bold"),
-                            bg="#28a745",
-                            fg="white",
-                            relief="raised",
-                            borderwidth=3,
-                            padx=25,
-                            pady=10,
-                            cursor="hand2",
-                            activebackground="#218838",
-                            activeforeground="white")
-        save_btn.pack(side='right', padx=(10, 20), pady=15)
-        
-        # Add hover effects for save button
-        def on_save_enter(event):
-            save_btn.config(bg="#218838", relief="raised", borderwidth=4)
-        def on_save_leave(event):
-            save_btn.config(bg="#28a745", relief="raised", borderwidth=3)
-        save_btn.bind("<Enter>", on_save_enter)
-        save_btn.bind("<Leave>", on_save_leave)
-        
-        # Close button next to save
-        close_btn = tk.Button(title_frame,
-                              text="❌ CLOSE",
-                              command=cancel,
-                              font=("Segoe UI", 10),
-                              bg="#dc3545",
-                              fg="white", 
-                              relief="raised",
-                              borderwidth=2,
-                              padx=15,
-                              pady=10,
-                              cursor="hand2",
-                              activebackground="#c82333",
-                              activeforeground="white")
-        close_btn.pack(side='right', padx=(0, 10), pady=15)
-        
-        # Add hover effects for close button
-        def on_close_enter(event):
-            close_btn.config(bg="#c82333")
-        def on_close_leave(event):
-            close_btn.config(bg="#dc3545")
-        close_btn.bind("<Enter>", on_close_enter)
-        close_btn.bind("<Leave>", on_close_leave)
-        
-        # Instructions with better styling and auto-save notice
-        instructions_frame = tk.Frame(main_frame, bg="#e9ecef", relief="solid", borderwidth=1)
-        instructions_frame.pack(fill='x', pady=(0, 20))
-        
-        instruction_label = tk.Label(instructions_frame, 
-            text="📋 Configure which classes and sections each teacher can teach by clicking on teacher tabs below:\n✅ Changes are AUTOMATICALLY SAVED as you check/uncheck boxes - No manual saving needed!\n💾 Use the GREEN SAVE BUTTON at top-right for final confirmation and feedback", 
-            font=("Segoe UI", 11),
-            foreground="#495057",
-            bg="#e9ecef",
-            wraplength=900,
-            justify="left",
-            padx=20,
-            pady=15)
-        instruction_label.pack(anchor='w')
-        
-        # Create notebook for teachers with better styling - now takes full remaining space
-        notebook_frame = tk.Frame(main_frame, bg="#f8f9fa")
-        notebook_frame.pack(fill='both', expand=True, pady=(0, 10))
-        
-        style = ttk.Style()
-        
-        # Configure tab styling for better visibility
-        style.configure('Teacher.TNotebook', 
-                       tabposition='n',
-                       background="#f8f9fa")
-        style.configure('Teacher.TNotebook.Tab', 
-                       padding=[20, 12], 
-                       font=('Segoe UI', 10, 'bold'),
-                       focuscolor="none")
-        
-        # Map styles for different states
-        style.map('Teacher.TNotebook.Tab',
-                 background=[('selected', '#2d6cdf'),
-                            ('active', '#5a9cff'),
-                            ('!active', '#dee2e6')],
-                 foreground=[('selected', 'white'),
-                            ('active', 'white'),
-                            ('!active', '#495057')],
-                 expand=[('selected', [2, 2, 2, 0])])
-        
-        notebook = ttk.Notebook(notebook_frame, style='Teacher.TNotebook')
-        notebook.pack(fill='both', expand=True)
-        
-        # Store teacher restriction data
-        teacher_restrictions = {}
-        
-        # Load existing restrictions from database
-        self.c.execute("SELECT teacher, class, section FROM teacher_restrictions")
-        existing_restrictions = {}
-        for teacher, class_name, section in self.c.fetchall():
-            if teacher not in existing_restrictions:
-                existing_restrictions[teacher] = []
-            existing_restrictions[teacher].append((class_name, section))
-        
-        # Create tab for each teacher
-        for teacher in self.config['teachers']:
-            # Check if teacher has existing restrictions
-            existing_for_teacher = existing_restrictions.get(teacher, [])
-            has_restrictions = len(existing_for_teacher) > 0
+    
+    def save_timetable_entry(self, class_name, section, period, day, teacher, subject):
+        """Save a timetable entry to the database"""
+        try:
+            if not hasattr(self, 'cursor') or not self.cursor:
+                self.setup_db()
             
-            # Create more descriptive tab text with better icons
-            if has_restrictions:
-                tab_text = f"�‍🏫 {teacher} ({len(existing_for_teacher)})"
-                tab_tooltip = f"{teacher} has {len(existing_for_teacher)} class-section restrictions"
+            # Get current week and year
+            week = self.selected_week.get()
+            year = self.selected_year.get()
+            
+            # Check if entry already exists
+            self.cursor.execute("""
+                SELECT id FROM timetable_entries 
+                WHERE class_name=? AND section=? AND period=? AND day=? AND week=? AND year=?
+            """, (class_name, section, period, day, week, year))
+            
+            if self.cursor.fetchone():
+                # Update existing entry
+                self.cursor.execute("""
+                    UPDATE timetable_entries 
+                    SET teacher=?, subject=? 
+                    WHERE class_name=? AND section=? AND period=? AND day=? AND week=? AND year=?
+                """, (teacher, subject, class_name, section, period, day, week, year))
             else:
-                tab_text = f"👤 {teacher} (All)"
-                tab_tooltip = f"{teacher} can teach any class-section (no restrictions)"
+                # Insert new entry
+                self.cursor.execute("""
+                    INSERT INTO timetable_entries 
+                    (class_name, section, period, day, week, year, teacher, subject)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (class_name, section, period, day, week, year, teacher, subject))
             
-            # Teacher frame with better styling
-            teacher_frame = tk.Frame(notebook, bg="#ffffff")
-            notebook.add(teacher_frame, text=tab_text)
+            self.conn.commit()
+            return True
+        except Exception as e:
+            print(f"Error saving timetable entry: {e}")
+            return False
+    
+    def auto_assign_timetable(self):
+        """Auto-assign teachers to timetable slots"""
+        try:
+            if not self.license_manager.validate_feature("auto_assign"):
+                messagebox.showwarning("Feature Restricted", 
+                    "Auto-assign is not available in your current license. Please upgrade to access this feature.")
+                return
             
-            # Create a modern container with padding
-            container = ttk.Frame(teacher_frame)
-            container.pack(fill='both', expand=True, padx=20, pady=20)
+            # Update status
+            if hasattr(self, 'status_bar'):
+                self.status_bar.config(text="Auto-assigning timetable...")
             
-            # Teacher name header - make it more prominent with better styling
-            header_frame = ttk.Frame(container)
-            header_frame.pack(fill='x', pady=(0, 20))
+            # Simple auto-assignment logic
+            teachers = self.config.get('teachers', [])
+            subjects = self.config.get('subjects', [])
             
-            teacher_icon = "👩‍🏫" if "female" in teacher.lower() or any(name in teacher.lower() for name in ["priya", "sita", "maya", "rita"]) else "👨‍🏫"
+            if not teachers or not subjects:
+                messagebox.showwarning("Configuration Missing", 
+                    "Please configure teachers and subjects before auto-assignment.")
+                return
             
-            teacher_header = tk.Label(header_frame, 
-                text=f"{teacher_icon} {teacher}",
-                font=("Segoe UI", 18, "bold"),
-                foreground="#2d6cdf",
-                bg="#f8f9fa",
-                relief="solid",
-                borderwidth=1,
-                padx=20,
-                pady=10)
-            teacher_header.pack(anchor='w')
+            assigned_count = 0
             
-            # Status indicator with better styling
-            existing_for_teacher = existing_restrictions.get(teacher, [])
-            if existing_for_teacher:
-                status_text = f"✅ Restrictions Active: {len(existing_for_teacher)} class-section combinations allowed"
-                status_color = "#28a745"
-                status_bg = "#d4edda"
-            else:
-                status_text = "ℹ️ No Restrictions: Can teach any class-section combination"
-                status_color = "#6c757d"
-                status_bg = "#e2e3e5"
+            # Get all empty slots
+            for class_name in self.config.get('classes', []):
+                for section in self.config.get('sections', []):
+                    for period in range(1, 9):  # 8 periods
+                        for day in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']:
+                            # Check if slot is empty
+                            entry_key = (class_name, section, period, day)
+                            if entry_key not in self.entries or not self.entries[entry_key].get():
+                                # Assign random teacher and subject
+                                import random
+                                teacher = random.choice(teachers)
+                                subject = random.choice(subjects)
+                                
+                                # Save the assignment
+                                if self.save_timetable_entry(class_name, section, period, day, teacher, subject):
+                                    if entry_key in self.entries:
+                                        self.entries[entry_key].set(f"{teacher} - {subject}")
+                                    assigned_count += 1
             
-            status_frame = tk.Frame(header_frame, bg=status_bg, relief="solid", borderwidth=1)
-            status_frame.pack(fill='x', pady=(10, 0))
+            # Update status
+            if hasattr(self, 'status_bar'):
+                self.status_bar.config(text=f"Auto-assignment complete: {assigned_count} slots assigned")
             
-            status_label = tk.Label(status_frame,
-                text=status_text,
-                font=("Segoe UI", 10, "bold"),
-                foreground=status_color,
-                bg=status_bg,
-                padx=15,
-                pady=8)
-            status_label.pack(anchor='w')
+            messagebox.showinfo("Auto-Assignment Complete", 
+                f"Successfully assigned {assigned_count} timetable slots.")
             
-            # Instructions for this teacher with better styling
-            instructions_frame = ttk.Frame(container)
-            instructions_frame.pack(fill='x', pady=(0, 20))
+            return assigned_count
             
-            teacher_instruction = tk.Label(instructions_frame, 
-                text=f"📚 Configure class-section restrictions for {teacher}:",
-                font=("Segoe UI", 12, "bold"),
-                foreground="#495057")
-            teacher_instruction.pack(anchor='w', pady=(0, 5))
-            
-            helper_text = tk.Label(instructions_frame,
-                text="✓ Check the boxes for classes and sections this teacher can teach\n✗ Uncheck to restrict access to those combinations",
-                font=("Segoe UI", 9),
-                foreground="#6c757d")
-            helper_text.pack(anchor='w')
-            
-            # Create scrollable frame for class-section options with proper configuration
-            scroll_container = ttk.Frame(container)
-            scroll_container.pack(fill='both', expand=True)
-            
-            # Create canvas with proper dimensions
-            canvas = tk.Canvas(scroll_container, 
-                              highlightthickness=0, 
-                              bg="#ffffff",
-                              height=400,  # Set specific height
-                              relief="sunken",
-                              borderwidth=1)
-            
-            # Create scrollbar with proper binding
-            scrollbar = ttk.Scrollbar(scroll_container, orient="vertical", command=canvas.yview)
-            scrollable_frame = ttk.Frame(canvas)
-            
-            # Bind frame configuration to update canvas scroll region
-            def configure_scroll_region(event=None):
-                canvas.configure(scrollregion=canvas.bbox("all"))
-            
-            scrollable_frame.bind("<Configure>", configure_scroll_region)
-            
-            # Create window in canvas
-            canvas_window = canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-            
-            # Bind canvas width to frame width
-            def configure_canvas_width(event):
-                canvas_width = event.width
-                canvas.itemconfig(canvas_window, width=canvas_width)
-            
-            canvas.bind('<Configure>', configure_canvas_width)
-            canvas.configure(yscrollcommand=scrollbar.set)
-            
-            # Pack canvas and scrollbar properly
-            canvas.pack(side="left", fill="both", expand=True)
-            scrollbar.pack(side="right", fill="y")
-            
-            # Create checkboxes for each class-section combination
-            teacher_restrictions[teacher] = {}
-            existing_for_teacher = existing_restrictions.get(teacher, [])
-            
-            # Add padding to scrollable content
-            content_frame = ttk.Frame(scrollable_frame)
-            content_frame.pack(fill='both', expand=True, padx=10, pady=10)
-            
-            for class_name in self.config['classes']:
-                # Class frame with modern card styling
-                class_frame = tk.Frame(content_frame, 
-                    bg="#ffffff",
-                    relief="solid", 
-                    borderwidth=2,
-                    highlightbackground="#dee2e6",
-                    highlightthickness=1)
-                class_frame.pack(fill='x', pady=8, padx=5)
-                
-                # Class header with icon and styling
-                class_header_frame = tk.Frame(class_frame, bg="#f8f9fa", height=40)
-                class_header_frame.pack(fill='x', padx=2, pady=2)
-                class_header_frame.pack_propagate(False)
-                
-                class_title = tk.Label(class_header_frame, 
-                    text=f"📚 {class_name}", 
-                    font=("Segoe UI", 12, "bold"),
-                    bg="#f8f9fa",
-                    fg="#495057")
-                class_title.pack(side='left', padx=15, pady=8)
-                
-                # Count of selected sections for this class
-                selected_count = sum(1 for cls, sec in existing_for_teacher if cls == class_name)
-                if selected_count > 0:
-                    count_label = tk.Label(class_header_frame,
-                        text=f"✓ {selected_count} sections",
-                        font=("Segoe UI", 9, "bold"),
-                        bg="#d4edda",
-                        fg="#155724",
-                        padx=8,
-                        pady=2)
-                    count_label.pack(side='right', padx=15, pady=8)
-                
-                # Section checkboxes with better layout
-                section_content_frame = tk.Frame(class_frame, bg="#ffffff")
-                section_content_frame.pack(fill='x', padx=15, pady=10)
-                
-                # Add a subtle label for sections
-                section_label = tk.Label(section_content_frame, 
-                    text="Available Sections:", 
-                    font=("Segoe UI", 10, "bold"),
-                    bg="#ffffff",
-                    fg="#6c757d")
-                section_label.pack(anchor='w', pady=(0, 8))
-                
-                # Create a grid layout for sections with better spacing and proper functionality
-                checkbox_container = tk.Frame(section_content_frame, bg="#ffffff")
-                checkbox_container.pack(fill='x', pady=5)
-                
-                # Use grid layout for better control
-                sections_per_row = 3  # Display 3 sections per row
-                row = 0
-                col = 0
-                
-                for section in self.config['sections']:
-                    var = tk.BooleanVar()
-                    # Check if this combination exists in restrictions
-                    if (class_name, section) in existing_for_teacher:
-                        var.set(True)
-                    
-                    # Create a frame for each checkbox with proper padding
-                    cb_frame = tk.Frame(checkbox_container, 
-                                       bg="#ffffff",
-                                       relief="flat",
-                                       borderwidth=0,
-                                       padx=5,
-                                       pady=3)
-                    cb_frame.grid(row=row, column=col, sticky='ew', padx=8, pady=4)
-                    
-                    # Configure grid weight for proper expansion
-                    checkbox_container.grid_columnconfigure(col, weight=1)
-                    
-                    # Create checkbutton with improved styling and functionality
-                    cb = tk.Checkbutton(cb_frame, 
-                        text=f"Section {section}", 
-                        variable=var,
-                        font=("Segoe UI", 10),
-                        bg="#ffffff",
-                        fg="#495057",
-                        activebackground="#e9ecef",
-                        activeforeground="#495057",
-                        selectcolor="#ffffff",
-                        borderwidth=2,
-                        highlightthickness=0,
-                        relief="solid",
-                        indicatoron=True,
-                        cursor="hand2",
-                        anchor="w",
-                        padx=8,
-                        pady=5,
-                        command=lambda t=teacher, c=class_name, s=section, v=var: self.auto_save_restriction(t, c, s, v))
-                    cb.pack(fill='x', anchor='w')
-                    
-                    # Move to next position
-                    col += 1
-                    if col >= sections_per_row:
-                        col = 0
-                        row += 1
-                    
-                    # Store the variable
-                    if class_name not in teacher_restrictions[teacher]:
-                        teacher_restrictions[teacher][class_name] = {}
-                    teacher_restrictions[teacher][class_name][section] = var
-            
-            # Enable mouse wheel scrolling with proper event binding
-            def bind_mousewheel(event):
-                def _on_mousewheel(e):
-                    canvas.yview_scroll(int(-1*(e.delta/120)), "units")
-                canvas.bind_all("<MouseWheel>", _on_mousewheel)
-            
-            def unbind_mousewheel(event):
-                canvas.unbind_all("<MouseWheel>")
-            
-            # Bind events when mouse enters/leaves the canvas
-            canvas.bind('<Enter>', bind_mousewheel)
-            canvas.bind('<Leave>', unbind_mousewheel)
-            
-            # Also bind to scrollable_frame for better coverage
-            scrollable_frame.bind('<Enter>', bind_mousewheel)
-            scrollable_frame.bind('<Leave>', unbind_mousewheel)
-            
-            # Set initial focus to enable scrolling
-            canvas.focus_set()
-        
-        # Add Hypersync footer with better styling
-        footer_frame = tk.Frame(win, bg="#343a40", height=40)
-        footer_frame.pack(fill='x', side='bottom')
-        footer_frame.pack_propagate(False)
-        
-        footer_label = tk.Label(footer_frame, 
-                                text="Hypersync - An AI based education startup", 
-                                font=("Segoe UI", 10, "bold"),
-                                foreground="#ffffff",
-                                bg="#343a40")
-        footer_label.pack(expand=True, pady=10)
-        
-        # Focus and keyboard bindings
-        win.focus_set()
-        win.lift()  # Bring window to front
-        
-        # Bind keyboard shortcuts
-        win.bind('<Return>', lambda e: save_restrictions())
-        win.bind('<Escape>', lambda e: cancel())
-        win.bind('<Control-s>', lambda e: save_restrictions())
-        
-        # Set focus to first tab
-        notebook.focus_set()
-        
-        # Protocol for window close button
-        win.protocol("WM_DELETE_WINDOW", cancel)
+        except Exception as e:
+            print(f"Error in auto-assignment: {e}")
+            if hasattr(self, 'status_bar'):
+                self.status_bar.config(text="Auto-assignment failed")
+            messagebox.showerror("Error", f"Auto-assignment failed: {str(e)}")
+            return 0
+    
+    def update_datetime(self):
+        """Update the date and time display every minute"""
+        if self.datetime_label:
+            current_datetime = datetime.now().strftime("%d %B %Y | %I:%M %p")
+            self.datetime_label.config(text=f"⏰ DATE/TIME: {current_datetime}")
+            # Also update styling for better visibility
+            self.datetime_label.config(bg="#2563eb", fg="#ffffff", relief="raised", bd=2)
+        # Schedule next update in 60 seconds
+        self.root.after(60000, self.update_datetime)
 
 if __name__ == "__main__":
     print("Launching Timetable Planner...")
