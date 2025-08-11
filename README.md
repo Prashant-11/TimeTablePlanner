@@ -1,10 +1,11 @@
-# ClassFlow ## 🚀 **DOWNLOAD LATEST VERSION - ALL FEATURES COMPLETE**
+# ClassFlow ## 🚀 **DOWNLOAD LATEST VERSION - SCROLLBAR FIXED**
 
-### ⬇️ **[ClassFlow_v2.0_COMPLETE_WITH_ALL_FEATURES.exe](https://github.com/Prashant-11/TimeTablePlanner/raw/master/clientdeploy/ClassFlow_v2.0_COMPLETE_WITH_ALL_FEATURES.exe)** *(WORKING LINK)*
+### ⬇️ **[ClassFlow_v2.0_SCROLLBAR_FIXED.exe](https://github.com/Prashant-11/TimeTablePlanner/raw/master/clientdeploy/dist/ClassFlow_v2.0_SCROLLBAR_FIXED.exe)** *(LATEST - RECOMMENDED)*
 
 **Alternative Downloads:**
+- [ClassFlow_v2.0_COMPLETE_WITH_ALL_FEATURES.exe](https://github.com/Prashant-11/TimeTablePlanner/raw/master/clientdeploy/ClassFlow_v2.0_COMPLETE_WITH_ALL_FEATURES.exe)
 - [ClassFlow_v2.0_FINAL_WITH_RESTRICTIONS.exe](https://github.com/Prashant-11/TimeTablePlanner/raw/master/clientdeploy/ClassFlow_v2.0_FINAL_WITH_RESTRICTIONS.exe)
-- [ClassFlow_v2.0_FINAL_COMPLETE.exe](https://github.com/Prashant-11/TimeTablePlanner/raw/master/clientdeploy/dist/ClassFlow_v2.0_FINAL_COMPLETE.exe) *(Upload in progress)* Timetable Management System
+- [ClassFlow_v2.0_FINAL_COMPLETE.exe](https://github.com/Prashant-11/TimeTablePlanner/raw/master/clientdeploy/dist/ClassFlow_v2.0_FINAL_COMPLETE.exe) Timetable Management System
 
 ![ClassFlow Logo](https://img.shields.io/badge/ClassFlow-v2.0%20BETA-blue?style=for-the-badge&logo=calendar)
 ![License](https://img.shields.io/badge/License-Freemium-green?style=for-the-badge)
@@ -40,12 +41,28 @@
 
 ---
 
-## 🔑 **Demo License Keys (Ready for Testing)**
+## 🔑 **License Keys for Testing (Latest Version)**
+
+### 🔴 **ADMIN KEY (Full Access)**
+```
+ADMIN-MASTER-KEY-2025-UNLIMITED
+```
+⭐ **Complete admin access** - No restrictions, unlimited everything
+
+### 🟡 **DEMO KEYS (Premium Access)**
 ```
 CFPRO-DEMO1-TRIAL-2025A-ACTIV
-CFPRO-SCHOL-BASIC-PREM1-UNLIM  
-CFPRO-INST1-ADVANCE-FULL2-ACTIV
+CFPRO-DEMO2-TRIAL-2025B-ACTIV
+CFPRO-DEMO3-TRIAL-2025C-ACTIV
+CFPRO-DEMO4-TRIAL-2025D-ACTIV
+CFPRO-DEMO5-TRIAL-2025E-ACTIV
 ```
+⭐ **Premium features unlocked** - All professional features available
+
+### ✅ **Fixed in Latest Version:**
+- **Working vertical scrollbar** in license activation dialog
+- **Mouse wheel support** for smooth scrolling
+- **All license keys functional** and properly validated
 
 ---
 

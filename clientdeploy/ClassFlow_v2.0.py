@@ -214,8 +214,41 @@ class LicenseManager:
         if not license_key or len(license_key) < 10:
             return False
             
-        # Basic license key validation
-        if license_key.startswith("CFLOW-"):
+        # Admin master key for unlimited access
+        if license_key == "ADMIN-MASTER-KEY-2025-UNLIMITED":
+            self.license_data.update({
+                "license_type": "ADMIN",
+                "license_key": license_key,
+                "features": {
+                    "max_classes": 9999,
+                    "max_sections": 9999,
+                    "max_teachers": 9999,
+                    "max_periods": 20,
+                    "auto_assign": True,
+                    "smart_match": True,
+                    "teacher_restrictions": False,  # Admin can edit everything
+                    "teacher_leave": True,
+                    "pdf_export": True,
+                    "watermark": False
+                }
+            })
+            self.save_license(self.license_data)
+            return True
+            
+        # Professional license keys (CFPRO- prefix)
+        valid_prefixes = ["CFLOW-", "CFPRO-"]
+        demo_keys = [
+            "CFPRO-DEMO1-TRIAL-2025A-ACTIV",
+            "CFPRO-DEMO2-TRIAL-2025B-ACTIV", 
+            "CFPRO-DEMO3-TRIAL-2025C-ACTIV",
+            "CFPRO-DEMO4-TRIAL-2025D-ACTIV",
+            "CFPRO-DEMO5-TRIAL-2025E-ACTIV"
+        ]
+        
+        # Check if it's a valid license key
+        is_valid = any(license_key.startswith(prefix) for prefix in valid_prefixes) or license_key in demo_keys
+        
+        if is_valid:
             # Activate premium license
             self.license_data.update({
                 "license_type": "PREMIUM",
@@ -1122,10 +1155,10 @@ class TimetableApp:
         close_btn.pack(side='right')
 
     def show_license_activation(self):
-        """Show enhanced license activation dialog with better visibility"""
+        """Show enhanced license activation dialog with working vertical scrollbar"""
         dialog = tk.Toplevel(self.root)
         dialog.title("Activate License Key")
-        dialog.geometry("600x500")
+        dialog.geometry("650x600")
         dialog.resizable(True, True)
         dialog.configure(bg='#ffffff')
         dialog.transient(self.root)
@@ -1143,28 +1176,44 @@ class TimetableApp:
                               fg='white')
         header_label.pack(expand=True)
         
-        # Main content with scrollbar
+        # Main content frame
         main_frame = tk.Frame(dialog, bg='#ffffff')
         main_frame.pack(fill='both', expand=True, padx=20, pady=20)
         
-        # Create canvas and scrollbar
+        # Create canvas and scrollbar for scrollable content
         canvas = tk.Canvas(main_frame, bg='#ffffff', highlightthickness=0)
-        scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=canvas.yview)
+        v_scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=canvas.yview)
         scrollable_frame = tk.Frame(canvas, bg='#ffffff')
         
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
+        # Configure scrolling
+        def configure_scroll_region(event):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+            
+        def on_canvas_configure(event):
+            # Update the scrollable frame width to match canvas width
+            canvas.itemconfig(canvas_frame, width=canvas.winfo_width())
         
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
+        def on_mousewheel(event):
+            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        
+        scrollable_frame.bind("<Configure>", configure_scroll_region)
+        canvas.bind('<Configure>', on_canvas_configure)
+        
+        # Bind mouse wheel to canvas
+        canvas.bind("<MouseWheel>", on_mousewheel)
+        
+        # Create window in canvas
+        canvas_frame = canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=v_scrollbar.set)
         
         # Pack canvas and scrollbar
         canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
+        v_scrollbar.pack(side="right", fill="y")
         
-        # Content sections
+        # Make the canvas focusable for mouse wheel events
+        canvas.focus_set()
+        
+        # Content sections in scrollable frame
         # Instructions section
         inst_frame = tk.LabelFrame(scrollable_frame, text="📋 Instructions", 
                                  font=("Segoe UI", 12, "bold"), bg='#ffffff', 
@@ -1185,7 +1234,9 @@ Premium features include:
 ✅ Priority customer support
 ✅ Export to PDF functionality
 ✅ Remove watermarks
-✅ Auto-save and backup features"""
+✅ Auto-save and backup features
+
+🔑 ADMIN ACCESS: Use the admin key for unrestricted access to all features."""
         
         instructions = tk.Label(inst_frame,
                               text=instructions_text,
@@ -1258,6 +1309,35 @@ Premium features include:
                                justify='left',
                                wraplength=500)
         purchase_info.pack(anchor='w')
+        
+        # Demo keys section
+        demo_frame = tk.LabelFrame(scrollable_frame, text="🧪 Demo License Keys", 
+                                 font=("Segoe UI", 12, "bold"), bg='#fff3cd', 
+                                 fg='#856404', padx=15, pady=15)
+        demo_frame.pack(fill='x', pady=(0, 20))
+        
+        demo_text = """For testing and demonstration purposes:
+
+🔑 ADMIN-MASTER-KEY-2025-UNLIMITED
+   ⭐ Full admin access - No restrictions
+
+🔑 CFPRO-DEMO1-TRIAL-2025A-ACTIV
+🔑 CFPRO-DEMO2-TRIAL-2025B-ACTIV  
+🔑 CFPRO-DEMO3-TRIAL-2025C-ACTIV
+🔑 CFPRO-DEMO4-TRIAL-2025D-ACTIV
+🔑 CFPRO-DEMO5-TRIAL-2025E-ACTIV
+   ⭐ Premium features unlocked
+
+📝 Copy any key above and paste it in the license field to test premium features."""
+        
+        demo_info = tk.Label(demo_frame,
+                           text=demo_text,
+                           font=("Courier New", 9),
+                           bg='#fff3cd',
+                           fg='#856404',
+                           justify='left',
+                           wraplength=500)
+        demo_info.pack(anchor='w')
         
         def activate():
             key = key_var.get().strip().upper()
