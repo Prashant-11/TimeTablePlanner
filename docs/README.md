@@ -41,7 +41,7 @@ Visit our [**Official Website**](https://prashant-11.github.io/TimeTablePlanner/
 
 ### 📧 Contact & Support
 
-- **Email**: support@classflow.in
+- **Email**: hypersyncsales@gmail.com
 - **Phone**: +91-XXXX-XXXXXX
 - **GitHub**: [Issues & Support](https://github.com/Prashant-11/TimeTablePlanner/issues)
 
