@@ -1,4 +1,10 @@
-# ClassFlow - Smart Timetable Management System
+# ClassFlow ## 🚀 **DOWNLOAD LATEST VERSION - ALL FEATURES COMPLETE**
+
+### ⬇️ **[ClassFlow_v2.0_COMPLETE_WITH_ALL_FEATURES.exe](https://github.com/Prashant-11/TimeTablePlanner/raw/master/clientdeploy/ClassFlow_v2.0_COMPLETE_WITH_ALL_FEATURES.exe)** *(WORKING LINK)*
+
+**Alternative Downloads:**
+- [ClassFlow_v2.0_FINAL_WITH_RESTRICTIONS.exe](https://github.com/Prashant-11/TimeTablePlanner/raw/master/clientdeploy/ClassFlow_v2.0_FINAL_WITH_RESTRICTIONS.exe)
+- [ClassFlow_v2.0_FINAL_COMPLETE.exe](https://github.com/Prashant-11/TimeTablePlanner/raw/master/clientdeploy/dist/ClassFlow_v2.0_FINAL_COMPLETE.exe) *(Upload in progress)* Timetable Management System
 
 ![ClassFlow Logo](https://img.shields.io/badge/ClassFlow-v2.0%20BETA-blue?style=for-the-badge&logo=calendar)
 ![License](https://img.shields.io/badge/License-Freemium-green?style=for-the-badge)
