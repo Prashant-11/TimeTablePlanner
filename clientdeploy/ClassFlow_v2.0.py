@@ -168,6 +168,32 @@ class LicenseManager:
         """Get numeric limit for a feature"""
         return self.license_data["features"].get(feature_name, 0)
     
+    def validate_config_limits(self, config):
+        """Validate configuration against license limits"""
+        max_classes = self.get_feature_limit("max_classes")
+        max_sections = self.get_feature_limit("max_sections") 
+        max_teachers = self.get_feature_limit("max_teachers")
+        
+        # Check if current config exceeds limits
+        violations = []
+        
+        if len(config.get('classes', [])) > max_classes:
+            violations.append(f"Classes: {len(config['classes'])} exceeds limit of {max_classes}")
+            # Truncate to limit
+            config['classes'] = config['classes'][:max_classes]
+        
+        if len(config.get('sections', [])) > max_sections:
+            violations.append(f"Sections: {len(config['sections'])} exceeds limit of {max_sections}")
+            # Truncate to limit
+            config['sections'] = config['sections'][:max_sections]
+        
+        if len(config.get('teachers', [])) > max_teachers:
+            violations.append(f"Teachers: {len(config['teachers'])} exceeds limit of {max_teachers}")
+            # Truncate to limit
+            config['teachers'] = config['teachers'][:max_teachers]
+        
+        return violations, config
+    
     def activate_premium_license(self, license_key):
         """Activate premium license with provided key"""
         # Simple validation - in production, this would verify with server
