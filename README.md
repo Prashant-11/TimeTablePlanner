@@ -1,11 +1,11 @@
-# ClassFlow ## 🚀 **DOWNLOAD LATEST VERSION - SCROLLBAR FIXED**
+# ClassFlow ## 🚀 **DOWNLOAD LATEST VERSION - IMMEDIATE ACCESS**
 
-### ⬇️ **[ClassFlow_v2.0_SCROLLBAR_FIXED.exe](https://github.com/Prashant-11/TimeTablePlanner/raw/master/clientdeploy/dist/ClassFlow_v2.0_SCROLLBAR_FIXED.exe)** *(LATEST - RECOMMENDED)*
+### ⬇️ **[ClassFlow_v2.0_COMPLETE_WITH_ALL_FEATURES.exe](https://github.com/Prashant-11/TimeTablePlanner/raw/master/clientdeploy/ClassFlow_v2.0_COMPLETE_WITH_ALL_FEATURES.exe)** *(WORKING NOW)*
 
 **Alternative Downloads:**
-- [ClassFlow_v2.0_COMPLETE_WITH_ALL_FEATURES.exe](https://github.com/Prashant-11/TimeTablePlanner/raw/master/clientdeploy/ClassFlow_v2.0_COMPLETE_WITH_ALL_FEATURES.exe)
 - [ClassFlow_v2.0_FINAL_WITH_RESTRICTIONS.exe](https://github.com/Prashant-11/TimeTablePlanner/raw/master/clientdeploy/ClassFlow_v2.0_FINAL_WITH_RESTRICTIONS.exe)
-- [ClassFlow_v2.0_FINAL_COMPLETE.exe](https://github.com/Prashant-11/TimeTablePlanner/raw/master/clientdeploy/dist/ClassFlow_v2.0_FINAL_COMPLETE.exe) Timetable Management System
+- [ClassFlow_v2.0_FINAL_COMPLETE.exe](https://github.com/Prashant-11/TimeTablePlanner/raw/master/clientdeploy/dist/ClassFlow_v2.0_FINAL_COMPLETE.exe)
+- ClassFlow_v2.0_SCROLLBAR_FIXED.exe *(Uploading - Will be available shortly)* Timetable Management System
 
 ![ClassFlow Logo](https://img.shields.io/badge/ClassFlow-v2.0%20BETA-blue?style=for-the-badge&logo=calendar)
 ![License](https://img.shields.io/badge/License-Freemium-green?style=for-the-badge)
@@ -63,6 +63,19 @@ CFPRO-DEMO5-TRIAL-2025E-ACTIV
 - **Working vertical scrollbar** in license activation dialog
 - **Mouse wheel support** for smooth scrolling
 - **All license keys functional** and properly validated
+
+### 🚨 **IMPORTANT - ADMIN KEY AVAILABLE NOW:**
+**Copy this admin key for immediate full access:**
+```
+ADMIN-MASTER-KEY-2025-UNLIMITED
+```
+**Instructions:**
+1. Download any version above
+2. Go to License → Activate License Key  
+3. Paste the admin key: `ADMIN-MASTER-KEY-2025-UNLIMITED`
+4. Enjoy full admin access with no restrictions!
+
+**Note:** Scrollbar fix is included in code. For best experience, wait for SCROLLBAR_FIXED version to upload completely.
 
 ---
 
