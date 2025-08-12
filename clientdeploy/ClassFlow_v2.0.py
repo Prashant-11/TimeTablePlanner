@@ -1298,8 +1298,8 @@ Premium features include:
    • All premium features + priority support
 
 📞 Contact us for enterprise pricing and bulk discounts!
-📧 Email: support@classflow.edu
-📱 WhatsApp: +91-9876543210"""
+📧 Email: hypersyncsales@gmail.com
+📱 WhatsApp: +91-9958722669"""
         
         purchase_info = tk.Label(purchase_frame,
                                text=purchase_text,

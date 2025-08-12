@@ -100,15 +100,15 @@ ADMIN-MASTER-KEY-2025-UNLIMITED
 ## 📧 **Updated Contact Information**
 
 ### **Customer Support:**
-- 📧 **Email**: [support@classflow.edu](mailto:support@classflow.edu)
-- 📱 **WhatsApp**: +91-9876543210
+- 📧 **Email**: [hypersyncsales@gmail.com](mailto:hypersyncsales@gmail.com)
+- 📱 **WhatsApp**: +91-9958722669
 - 🌐 **Website**: https://classflow.edu
 - 💬 **Help Center**: https://help.classflow.edu
 
 ### **Business Inquiries:**
-- 💼 **Sales**: [sales@classflow.edu](mailto:sales@classflow.edu)
-- 🤝 **Partnerships**: [partners@classflow.edu](mailto:partners@classflow.edu)
-- 🏢 **Enterprise**: [enterprise@classflow.edu](mailto:enterprise@classflow.edu)
+- 💼 **Sales**: [hypersyncsales@gmail.com](mailto:hypersyncsales@gmail.com)
+- 🤝 **Partnerships**: [hypersyncsales@gmail.com](mailto:hypersyncsales@gmail.com)
+- 🏢 **Enterprise**: [hypersyncsales@gmail.com](mailto:hypersyncsales@gmail.com)
 
 ---
 
@@ -193,9 +193,9 @@ Visit our [**Official Website**](https://prashant-11.github.io/TimeTablePlanner/
 ### 📧 Contact & Support
 
 - **Website**: [prashant-11.github.io/TimeTablePlanner](https://prashant-11.github.io/TimeTablePlanner/)
-- **Email**: support@classflow.in  
+- **Email**: [hypersyncsales@gmail.com](mailto:hypersyncsales@gmail.com)
 - **GitHub Issues**: [Report bugs & requests](https://github.com/Prashant-11/TimeTablePlanner/issues)
-- **Phone**: +91-XXXX-XXXXXX
+- **Phone**: +91-9958722669
 
 ### 🏆 Why ClassFlow?
 
